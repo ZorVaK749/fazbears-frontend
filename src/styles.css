@@ -1,0 +1,222 @@
+/* ============================================================
+   PEDIDOS360 — Freddy Fazbear's Pizza 1987
+   Global Styles & Design System
+   ============================================================ */
+
+@import "tailwindcss";
+
+/* ── Fuentes ─────────────────────────────────────────────── */
+:root {
+  /* Paleta FNaF2 */
+  --fnaf-bg:        #0a0a0f;
+  --fnaf-surface:   #13131a;
+  --fnaf-surface2:  #1c1c28;
+  --fnaf-border:    #2a2a3d;
+  --fnaf-purple:    #b54fff;
+  --fnaf-purple-dim:#7a2db0;
+  --fnaf-cyan:      #00f5ff;
+  --fnaf-yellow:    #ffd700;
+  --fnaf-green:     #39ff14;
+  --fnaf-red:       #ff2244;
+  --fnaf-text:      #e8e8f0;
+  --fnaf-muted:     #5a5a7a;
+
+  /* Fuentes */
+  --font-pixel:     'VT323', monospace;
+  --font-body:      'Rajdhani', sans-serif;
+}
+
+/* ── Reset & Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background-color: var(--fnaf-bg);
+  color: var(--fnaf-text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Efecto CRT / Scanlines Global ───────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.18) 2px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Viñeta CRT en los bordes */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: radial-gradient(ellipse at center,
+    transparent 60%,
+    rgba(0,0,0,0.55) 100%
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── Tipografía ──────────────────────────────────────────── */
+h1, h2, h3, .pixel { font-family: var(--font-pixel); letter-spacing: 2px; }
+
+/* ── Scrollbar Custom ────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--fnaf-surface); }
+::-webkit-scrollbar-thumb { background: var(--fnaf-purple-dim); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fnaf-purple); }
+
+/* ── Clases Utilitarias FNaF2 ───────────────────────────── */
+
+/* Texto neón con glow */
+.text-neon-purple {
+  color: var(--fnaf-purple);
+  text-shadow: 0 0 8px var(--fnaf-purple), 0 0 20px var(--fnaf-purple-dim);
+}
+.text-neon-cyan {
+  color: var(--fnaf-cyan);
+  text-shadow: 0 0 8px var(--fnaf-cyan);
+}
+.text-neon-green {
+  color: var(--fnaf-green);
+  text-shadow: 0 0 8px var(--fnaf-green);
+}
+.text-neon-yellow {
+  color: var(--fnaf-yellow);
+  text-shadow: 0 0 8px var(--fnaf-yellow);
+}
+
+/* Bordes neon */
+.border-neon-purple { border-color: var(--fnaf-purple); box-shadow: 0 0 6px var(--fnaf-purple); }
+.border-neon-cyan   { border-color: var(--fnaf-cyan);   box-shadow: 0 0 6px var(--fnaf-cyan); }
+
+/* Botón neon principal */
+.btn-neon {
+  font-family: var(--font-pixel);
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  padding: 0.6rem 1.8rem;
+  background: transparent;
+  color: var(--fnaf-purple);
+  border: 2px solid var(--fnaf-purple);
+  box-shadow: 0 0 10px var(--fnaf-purple), inset 0 0 10px rgba(181,79,255,0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+.btn-neon:hover {
+  background: rgba(181,79,255,0.15);
+  box-shadow: 0 0 20px var(--fnaf-purple), 0 0 40px rgba(181,79,255,0.4), inset 0 0 20px rgba(181,79,255,0.15);
+  transform: translateY(-1px);
+}
+.btn-neon:active { transform: translateY(0); }
+
+.btn-neon-cyan {
+  color: var(--fnaf-cyan);
+  border-color: var(--fnaf-cyan);
+  box-shadow: 0 0 10px var(--fnaf-cyan), inset 0 0 10px rgba(0,245,255,0.1);
+}
+.btn-neon-cyan:hover {
+  background: rgba(0,245,255,0.1);
+  box-shadow: 0 0 20px var(--fnaf-cyan), 0 0 40px rgba(0,245,255,0.3);
+}
+
+.btn-neon-yellow {
+  color: var(--fnaf-yellow);
+  border-color: var(--fnaf-yellow);
+  box-shadow: 0 0 10px var(--fnaf-yellow), inset 0 0 10px rgba(255,215,0,0.1);
+}
+.btn-neon-yellow:hover {
+  background: rgba(255,215,0,0.1);
+  box-shadow: 0 0 20px var(--fnaf-yellow), 0 0 40px rgba(255,215,0,0.3);
+}
+
+/* Card oscura */
+.card-fnaf {
+  background: var(--fnaf-surface);
+  border: 1px solid var(--fnaf-border);
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+}
+.card-fnaf:hover {
+  border-color: var(--fnaf-purple);
+  box-shadow: 0 0 15px rgba(181,79,255,0.25), 0 4px 20px rgba(0,0,0,0.5);
+  transform: translateY(-3px);
+}
+
+/* Badge de estado */
+.badge-pendiente  { background: rgba(255,215,0,0.15);  color: var(--fnaf-yellow); border: 1px solid var(--fnaf-yellow); }
+.badge-preparando { background: rgba(255,140,0,0.15);  color: #ff8c00;            border: 1px solid #ff8c00; }
+.badge-completado { background: rgba(57,255,20,0.12);  color: var(--fnaf-green);  border: 1px solid var(--fnaf-green); }
+
+/* Animación parpadeo */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.blink { animation: blink 1.8s ease-in-out infinite; }
+
+/* Animación glitch */
+@keyframes glitch {
+  0%   { clip-path: inset(0 0 98% 0); transform: translate(-3px, 0); }
+  10%  { clip-path: inset(40% 0 50% 0); transform: translate(2px, 0); }
+  20%  { clip-path: inset(80% 0 5% 0); transform: translate(-1px, 0); }
+  30%  { clip-path: inset(20% 0 60% 0); transform: translate(3px, 0); }
+  40%  { clip-path: inset(60% 0 30% 0); transform: translate(-2px, 0); }
+  50%  { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+  100% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+}
+.glitch-text {
+  position: relative;
+}
+.glitch-text::before {
+  content: attr(data-text);
+  position: absolute; top: 0; left: 0;
+  color: var(--fnaf-cyan);
+  animation: glitch 4s infinite;
+  opacity: 0.7;
+}
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute; top: 0; left: 0;
+  color: var(--fnaf-purple);
+  animation: glitch 4s 0.3s infinite reverse;
+  opacity: 0.7;
+}
+
+/* Tab activo */
+.tab-active {
+  color: var(--fnaf-cyan);
+  border-bottom: 2px solid var(--fnaf-cyan);
+  box-shadow: 0 4px 10px rgba(0,245,255,0.3);
+}
+
+/* Input estilo terminal */
+.input-terminal {
+  background: var(--fnaf-surface2);
+  border: 1px solid var(--fnaf-border);
+  color: var(--fnaf-green);
+  font-family: var(--font-pixel);
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+.input-terminal:focus {
+  border-color: var(--fnaf-green);
+  box-shadow: 0 0 8px rgba(57,255,20,0.3);
+}
