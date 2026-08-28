@@ -21,7 +21,6 @@ interface CategoriaTab {
     <app-navbar />
 
     <main class="catalogo-main">
-      <!-- Header -->
       <header class="catalogo-header">
         <h1 class="pixel text-neon-yellow catalogo-title">MENÚ DEL ESTABLECIMIENTO</h1>
         <p class="catalogo-sub">Seleccione sus productos — Freddy Fazbear's Pizza &copy; 1987</p>

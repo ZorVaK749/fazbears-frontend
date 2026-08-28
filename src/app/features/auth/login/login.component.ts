@@ -1,5 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { MsalService, MsalBroadcastService } from '@azure/msal-angular';
+import { InteractionStatus } from '@azure/msal-browser';
+import { Subject } from 'rxjs';
+import { filter, takeUntil } from 'rxjs/operators';
+import { loginRequest } from '../../../core/auth/auth.config';
 
 @Component({
   selector: 'app-login',
@@ -7,7 +12,7 @@ import { Router } from '@angular/router';
   imports: [],
   template: `
     <div class="login-container">
-      <!-- Fondo con animatrónicos borrosos -->
+      <!-- Fondo con gradiente radial -->
       <div class="login-bg"></div>
 
       <!-- Panel central -->
@@ -27,9 +32,17 @@ import { Router } from '@angular/router';
         <p class="login-desc">Sistema interno de pedidos y reservaciones</p>
         <p class="login-desc">Acceso exclusivo para personal autorizado</p>
 
-        <!-- Botón login -->
-        <button class="btn-neon login-btn" (click)="entrar()">
-          ⊞ &nbsp; INICIAR SESIÓN
+        <!-- Botón login con Microsoft -->
+        <button
+          id="btn-microsoft-login"
+          class="btn-neon login-btn"
+          (click)="loginConMicrosoft()"
+          [disabled]="cargando">
+          @if (cargando) {
+            <span class="pixel blink">[ AUTENTICANDO... ]</span>
+          } @else {
+            ⊞ &nbsp; INICIAR SESIÓN CON MICROSOFT
+          }
         </button>
 
         <!-- Advertencia FNaF -->
@@ -51,7 +64,6 @@ import { Router } from '@angular/router';
       position: relative; overflow: hidden;
     }
 
-    /* Fondo oscuro con gradiente radial */
     .login-bg {
       position: absolute; inset: 0;
       background:
@@ -60,7 +72,6 @@ import { Router } from '@angular/router';
         var(--fnaf-bg);
     }
 
-    /* Panel central */
     .login-panel {
       position: relative; z-index: 10;
       display: flex; flex-direction: column; align-items: center;
@@ -102,15 +113,14 @@ import { Router } from '@angular/router';
       font-size: 1.15rem; margin-top: 0.5rem;
       padding: 0.75rem 2.5rem; width: 100%;
     }
+    .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .login-warning {
       font-size: 0.7rem; color: var(--fnaf-red);
       text-shadow: 0 0 6px var(--fnaf-red);
       margin: 0; text-align: center;
-      animation: blink 2.5s ease-in-out infinite;
     }
 
-    /* Esquinas decorativas */
     .corner {
       position: absolute; width: 30px; height: 30px;
       border-color: var(--fnaf-purple); border-style: solid;
@@ -121,12 +131,39 @@ import { Router } from '@angular/router';
     .corner-br { bottom: 1rem; right: 1rem; border-width: 0 2px 2px 0; }
   `]
 })
-export class LoginComponent {
-  constructor(private router: Router) {}
+export class LoginComponent implements OnInit, OnDestroy {
+  private msalSvc = inject(MsalService);
+  private msalBroadcast = inject(MsalBroadcastService);
+  private router = inject(Router);
 
-  entrar() {
-    // TODO: Integrar MSAL Azure cuando esté configurado
-    // Por ahora navega directo al catálogo
-    this.router.navigate(['/catalogo']);
+  cargando = false;
+  private destroy$ = new Subject<void>();
+
+  ngOnInit() {
+    // Escucha el resultado del redirect de Microsoft
+    this.msalSvc.handleRedirectObservable().subscribe();
+
+    // Si ya hay sesión activa → navega directo al catálogo
+    this.msalBroadcast.inProgress$
+      .pipe(
+        filter(status => status === InteractionStatus.None),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(() => {
+        if (this.msalSvc.instance.getAllAccounts().length > 0) {
+          this.router.navigate(['/catalogo']);
+        }
+      });
+  }
+
+  loginConMicrosoft() {
+    this.cargando = true;
+    // Inicia el flujo Authorization Code + PKCE via redirect
+    this.msalSvc.loginRedirect(loginRequest);
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

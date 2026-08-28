@@ -1,6 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CarritoService } from '../../core/services/carrito.service';
+import { MsalService } from '@azure/msal-angular';
+import { AccountInfo } from '@azure/msal-browser';
 
 @Component({
   selector: 'app-navbar',
@@ -24,13 +26,31 @@ import { CarritoService } from '../../core/services/carrito.service';
         </a>
       </div>
 
-      <!-- Botón carrito -->
-      <button class="btn-carrito" (click)="carritoSvc.toggleCarrito()">
-        <span class="pixel text-neon-cyan">🛒 CARRITO</span>
-        @if (carritoSvc.cantidadItems > 0) {
-          <span class="carrito-badge">{{ carritoSvc.cantidadItems }}</span>
+      <!-- Sección derecha: carrito + usuario -->
+      <div class="navbar-right">
+        <!-- Botón carrito -->
+        <button id="btn-carrito" class="btn-carrito" (click)="carritoSvc.toggleCarrito()">
+          <span class="pixel text-neon-cyan">🛒 CARRITO</span>
+          @if (carritoSvc.cantidadItems > 0) {
+            <span class="carrito-badge">{{ carritoSvc.cantidadItems }}</span>
+          }
+        </button>
+
+        <!-- Info del usuario autenticado -->
+        @if (usuario) {
+          <div class="usuario-info">
+            <span class="pixel text-neon-green usuario-nombre">
+              👤 {{ usuario.name ?? usuario.username }}
+            </span>
+            <button
+              id="btn-logout"
+              class="btn-logout pixel"
+              (click)="logout()">
+              SALIR
+            </button>
+          </div>
         }
-      </button>
+      </div>
     </nav>
   `,
   styles: [`
@@ -53,6 +73,9 @@ import { CarritoService } from '../../core/services/carrito.service';
       transition: color 0.2s, border-color 0.2s;
     }
     .nav-link:hover, .nav-active { color: var(--fnaf-cyan); border-bottom-color: var(--fnaf-cyan); }
+
+    .navbar-right { display: flex; align-items: center; gap: 1rem; }
+
     .btn-carrito {
       position: relative; background: transparent; border: 1px solid var(--fnaf-cyan);
       padding: 0.4rem 1rem; cursor: pointer;
@@ -67,8 +90,33 @@ import { CarritoService } from '../../core/services/carrito.service';
       display: flex; align-items: center; justify-content: center;
       box-shadow: 0 0 8px var(--fnaf-purple);
     }
+
+    .usuario-info { display: flex; align-items: center; gap: 0.75rem; }
+    .usuario-nombre { font-size: 0.75rem; }
+    .btn-logout {
+      background: transparent; border: 1px solid var(--fnaf-red);
+      color: var(--fnaf-red); padding: 0.25rem 0.75rem; cursor: pointer;
+      font-size: 0.75rem; transition: background 0.2s, box-shadow 0.2s;
+    }
+    .btn-logout:hover { background: rgba(255,77,77,0.1); box-shadow: 0 0 8px var(--fnaf-red); }
   `]
 })
-export class NavbarComponent {
+export class NavbarComponent implements OnInit {
   carritoSvc = inject(CarritoService);
+  private msalSvc = inject(MsalService);
+
+  usuario: AccountInfo | null = null;
+
+  ngOnInit() {
+    const cuentas = this.msalSvc.instance.getAllAccounts();
+    if (cuentas.length > 0) {
+      this.usuario = cuentas[0];
+    }
+  }
+
+  logout() {
+    this.msalSvc.logoutRedirect({
+      postLogoutRedirectUri: 'http://localhost:4200/login',
+    });
+  }
 }
