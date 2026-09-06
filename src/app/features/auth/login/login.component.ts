@@ -140,10 +140,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   ngOnInit() {
-    // Escucha el resultado del redirect de Microsoft
-    this.msalSvc.handleRedirectObservable().subscribe();
-
-    // Si ya hay sesión activa → navega directo al catálogo
+    // handleRedirectObservable() ya corre en App (root) — NO duplicar aquí.
+    // Solo escuchamos el estado para redirigir si ya hay sesión.
     this.msalBroadcast.inProgress$
       .pipe(
         filter(status => status === InteractionStatus.None),

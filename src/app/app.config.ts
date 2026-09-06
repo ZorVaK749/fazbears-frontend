@@ -11,9 +11,6 @@ import {
 } from '@angular/common/http';
 import {
   MsalModule,
-  MsalService,
-  MsalGuard,
-  MsalBroadcastService,
   MsalInterceptor,
 } from '@azure/msal-angular';
 import {
@@ -32,6 +29,8 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptorsFromDi()),
 
     // ─── MSAL providers ───────────────────────────────────────────────────────
+    // MsalModule.forRoot ya registra internamente: MsalService, MsalGuard,
+    // MsalBroadcastService. NO repetirlos abajo (causa doble instancia MSAL).
     importProvidersFrom(
       MsalModule.forRoot(
         MSALInstanceFactory(),
@@ -46,10 +45,5 @@ export const appConfig: ApplicationConfig = {
       useClass: MsalInterceptor,
       multi: true,
     },
-
-    // Servicios MSAL
-    MsalService,
-    MsalGuard,
-    MsalBroadcastService,
   ],
 };
