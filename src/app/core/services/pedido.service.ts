@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export interface ItemPedido {
   productoId: number;
@@ -21,7 +22,7 @@ export interface Pedido {
 
 @Injectable({ providedIn: 'root' })
 export class PedidoService {
-  private base = 'http://localhost:8082/api/pedidos';
+  private base = environment.apiPedidos;
 
   constructor(private http: HttpClient) {}
 

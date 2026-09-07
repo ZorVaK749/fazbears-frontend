@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Producto } from './producto.service';
+import { environment } from '../../../environments/environment';
 
 export interface ItemCarrito {
   productoId: number;
@@ -16,7 +17,7 @@ export interface CarritoState {
 
 @Injectable({ providedIn: 'root' })
 export class CarritoService {
-  private base = 'http://localhost:8083/api/carrito';
+  private base = environment.apiCarrito;
 
   /** Estado del carrito en memoria (reactivo con signals) */
   carrito = signal<CarritoState>({ items: [], total: 0 });

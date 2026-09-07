@@ -6,14 +6,15 @@ import {
   LogLevel,
   type Configuration,
 } from '@azure/msal-browser';
+import { environment } from '../../../environments/environment';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⚠️  REEMPLAZA estos valores con los de tu App Registration en Azure Entra ID
 //     Application (client) ID  → clientId
 //     Directory  (tenant)  ID  → tenantId
 // ─────────────────────────────────────────────────────────────────────────────
-export const AZURE_CLIENT_ID = '304fa289-2b72-447b-9c48-f00998f7c22f';
-export const AZURE_TENANT_ID = 'ee0d2c5b-e60b-4c57-9b30-8a38a520c430';
+export const AZURE_CLIENT_ID = '4ff2634d-561c-45aa-b1f8-27f41e8f6237';
+export const AZURE_TENANT_ID = 'e5372bf0-c5e3-4286-887c-79069f209c1f';
 
 // Scope expuesto en "Expose an API" → api://<client-id>/access_as_user
 export const API_SCOPE = `api://${AZURE_CLIENT_ID}/access_as_user`;
@@ -64,9 +65,9 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>();
 
   // Rutas protegidas: el interceptor adjuntará el Bearer JWT en estas URLs
-  protectedResourceMap.set('http://localhost:8081/api/productos', [API_SCOPE]);
-  protectedResourceMap.set('http://localhost:8083/api/carrito', [API_SCOPE]);
-  protectedResourceMap.set('http://localhost:8082/api/pedidos', [API_SCOPE]);
+  protectedResourceMap.set(environment.apiProductos, [API_SCOPE]);
+  protectedResourceMap.set(environment.apiCarrito, [API_SCOPE]);
+  protectedResourceMap.set(environment.apiPedidos, [API_SCOPE]);
 
   // Cuando tengas las URLs de AWS API Gateway, agrégalas aquí también:
   // protectedResourceMap.set('https://<gateway>.execute-api.<region>.amazonaws.com/prod/*', [API_SCOPE]);

@@ -41,6 +41,9 @@ import { AccountInfo } from '@azure/msal-browser';
           <div class="usuario-info">
             <span class="pixel text-neon-green usuario-nombre">
               👤 {{ usuario.name ?? usuario.username }}
+              @if (rolUsuario) {
+                <span class="badge-rol">[{{ rolUsuario }}]</span>
+              }
             </span>
             <button
               id="btn-logout"
@@ -93,6 +96,11 @@ import { AccountInfo } from '@azure/msal-browser';
 
     .usuario-info { display: flex; align-items: center; gap: 0.75rem; }
     .usuario-nombre { font-size: 0.75rem; }
+    .badge-rol {
+      color: #b54fff; border: 1px solid #b54fff;
+      padding: 2px 5px; border-radius: 4px; margin-left: 5px;
+      font-size: 0.65rem; text-transform: uppercase;
+    }
     .btn-logout {
       background: transparent; border: 1px solid var(--fnaf-red);
       color: var(--fnaf-red); padding: 0.25rem 0.75rem; cursor: pointer;
@@ -106,11 +114,16 @@ export class NavbarComponent implements OnInit {
   private msalSvc = inject(MsalService);
 
   usuario: AccountInfo | null = null;
+  rolUsuario: string = '';
 
   ngOnInit() {
     const cuentas = this.msalSvc.instance.getAllAccounts();
     if (cuentas.length > 0) {
       this.usuario = cuentas[0];
+      const claims = this.usuario.idTokenClaims as any;
+      if (claims && claims.roles && claims.roles.length > 0) {
+        this.rolUsuario = claims.roles[0];
+      }
     }
   }
 
