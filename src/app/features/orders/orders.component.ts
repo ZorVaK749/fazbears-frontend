@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { PedidoService, Pedido } from '../../core/services/pedido.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CarritoComponent } from '../cart/carrito.component';
@@ -111,13 +111,14 @@ import { RouterLink } from '@angular/router';
 })
 export class OrdersComponent implements OnInit {
   private pedidoSvc = inject(PedidoService);
+  private cdr = inject(ChangeDetectorRef);
   pedidos: Pedido[] = [];
   cargando = true;
 
   ngOnInit() {
     this.pedidoSvc.getAll().subscribe({
-      next: (data) => { this.pedidos = data; this.cargando = false; },
-      error: () => { this.cargando = false; }
+      next: (data) => { this.pedidos = data; this.cargando = false; this.cdr.detectChanges(); },
+      error: () => { this.cargando = false; this.cdr.detectChanges(); }
     });
   }
 
