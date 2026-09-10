@@ -116,7 +116,7 @@ export class NavbarComponent implements OnInit {
 
   logout() {
     this.msalSvc.logoutRedirect({
-      postLogoutRedirectUri: 'http://localhost:4200/login',
+      postLogoutRedirectUri: window.location.origin + '/login',
     });
   }
 }

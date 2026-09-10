@@ -23,8 +23,8 @@ export const msalConfig: Configuration = {
   auth: {
     clientId: AZURE_CLIENT_ID,
     authority: `https://login.microsoftonline.com/${AZURE_TENANT_ID}`,
-    redirectUri: 'http://localhost:4200',
-    postLogoutRedirectUri: 'http://localhost:4200',
+    redirectUri: window.location.origin,
+    postLogoutRedirectUri: window.location.origin,
     navigateToLoginRequestUrl: true,
   },
   cache: {
