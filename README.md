@@ -1,244 +1,68 @@
-# 🍕 Fazbear Frontend — Pedidos360
+# Fazbear's Pizza — Frontend (Angular SPA) 🍕🐻
 
-> **SPA Angular 22** para el sistema de gestión de pedidos de **Freddy Fazbear's Pizza**.  
-> Interfaz de catálogo, carrito y seguimiento de pedidos con temática retro-pixelada.
+Sistema de gestión de pedidos en la nube con arquitectura de microservicios. Este repositorio corresponde a la capa frontend de presentación.
 
----
+## 🚀 Tecnologías
 
-## 📋 Tabla de Contenidos
-
-- [Stack](#-stack)
-- [Estructura del Proyecto](#-estructura-del-proyecto)
-- [Prerrequisitos](#-prerrequisitos)
-- [Instalación y Arranque Local](#-instalación-y-arranque-local)
-- [Variables de Entorno](#-variables-de-entorno)
-- [Arquitectura de Componentes](#-arquitectura-de-componentes)
-- [Conexión con los Microservicios](#-conexión-con-los-microservicios)
-- [Build de Producción](#-build-de-producción)
-- [Despliegue Cloud](#-despliegue-cloud)
-- [Notas de Desarrollo](#-notas-de-desarrollo)
+* **Framework:** Angular 17+ (Standalone Components, Signals, RxJS)
+* **Auth:** Microsoft Azure Entra ID (`@azure/msal-angular`, `@azure/msal-browser`)
+* **Styling:** CSS puro con diseño Neumórfico/Glassmorfismo oscuro
+* **Deployment:** Nginx web server sobre Docker (Alpine)
 
 ---
 
-## 🛠 Stack
+## 🔒 Autenticación y Flujo (E2E Security)
 
-| Tecnología | Versión | Uso |
-|---|---|---|
-| Angular | `^22.1.0` | Framework principal (standalone components) |
-| TypeScript | `~6.0.2` | Lenguaje base |
-| RxJS | `~7.8.0` | Programación reactiva (HttpClient, Observables) |
-| Angular Signals | built-in | Estado reactivo del carrito (`signal<CarritoState>`) |
-| Tailwind CSS | `^4.3.3` | Utilidades CSS (via Vite plugin) |
-| Vitest | `^4.0.8` | Testing unitario |
-| Prettier | `^3.8.1` | Formateo de código |
-| Node / npm | `npm@11.17.0` | Gestor de paquetes |
+Este frontend implementa un flujo estricto de seguridad utilizando Microsoft MSAL (OAuth 2.0 / OpenID Connect):
+1. **SSO Azure:** Al ingresar, el usuario es redirigido a `login.microsoftonline.com`.
+2. **Adquisición de Token:** Se adquiere silenciosamente un `Bearer Token` JWT.
+3. **MsalInterceptor:** Se interceptan automáticamente las peticiones hacia el AWS API Gateway (`https://1nqf3okm71...`) inyectando el token en las cabeceras.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🐋 Despliegue en AWS EC2 (Docker + Nginx)
 
-```
-fazbear-frontend/
-├── src/
-│   ├── app/
-│   │   ├── app.ts                          # Root component + router
-│   │   ├── app.config.ts                   # provideRouter, provideHttpClient
-│   │   ├── core/
-│   │   │   └── services/
-│   │   │       ├── producto.service.ts     # GET /api/productos → MS :8081
-│   │   │       ├── carrito.service.ts      # Estado local + POST /api/carrito → MS :8083
-│   │   │       └── pedido.service.ts       # GET/POST /api/pedidos → MS :8082
-│   │   ├── features/
-│   │   │   ├── catalog/
-│   │   │   │   └── catalogo.component.ts   # Catálogo de productos con filtro por categoría
-│   │   │   ├── cart/
-│   │   │   │   └── carrito.component.ts    # Drawer del carrito lateral
-│   │   │   └── orders/
-│   │   │       └── orders.component.ts     # Historial de pedidos del usuario
-│   │   └── shared/
-│   │       └── navbar/
-│   │           └── navbar.component.ts     # Barra de navegación global
-│   ├── environments/                       # ⚠️ Crear antes de desplegar (ver §Variables de Entorno)
-│   ├── index.html
-│   └── styles.css                          # Variables CSS globales (tema FNAF)
-├── angular.json
-├── package.json
-├── tsconfig.json
-└── README.md
+El proyecto está preparado para producción en la nube usando un build multi-stage con Docker, sirviendo la aplicación a través de Nginx y resolviendo certificados SSL autofirmados para complacer los estrictos requisitos de seguridad HTTPS de las Redirect URIs de Azure.
+
+### Requisitos previos en el Host (EC2 Amazon Linux)
+```bash
+sudo dnf update -y
+sudo dnf install git docker -y
+sudo systemctl enable --now docker
 ```
 
----
-
-## ✅ Prerrequisitos
-
-- **Node.js** ≥ 20 LTS
-- **npm** ≥ 11
-- Los **3 microservicios backend** corriendo (ver sus respectivos READMEs):
-  - `fazbear-productos` en `localhost:8081`
-  - `fazbear-pedidos` en `localhost:8082`
-  - `fazbear-carrito` en `localhost:8083`
-
----
-
-## 🚀 Instalación y Arranque Local
+### Comandos de Despliegue
 
 ```bash
-# 1. Instalar dependencias
-npm install
+# 1. Clonar
+git clone https://github.com/ZorVaK749/fazbears-frontend.git
+cd fazbears-frontend
 
-# 2. Arrancar el servidor de desarrollo
-npm start
-# → http://localhost:4200
+# 2. Construir Imagen (compilación Angular + Config Nginx + SSL generation)
+sudo docker build -t fazbear-frontend:1.0 .
+
+# 3. Ejecutar Contenedor exponiendo puertos 80 y 443 (HTTPS requerido por Azure)
+sudo docker run -d -p 80:80 -p 443:443 --name fz-frontend fazbear-frontend:1.0
 ```
 
-> El servidor de desarrollo hace **proxy directo** a los microservicios en `localhost`. Asegúrate de que los 3 backends estén activos antes de navegar al catálogo.
+### Configuración Nginx Interna
+El archivo `nginx.conf` incluido redirige todo el tráfico al `index.html` (necesario para el Router de Angular) y activa la compresión / caché de estáticos.
 
 ---
 
-## 🌐 Variables de Entorno
+## 💻 Desarrollo Local
 
-Los servicios Angular usan URLs base hardcodeadas para desarrollo local. **Antes de hacer build de producción o desplegar a cloud**, crea los archivos de entorno:
+Para correr este proyecto en entorno de desarrollo local (PC):
 
-### `src/environments/environment.ts` — Desarrollo local
+1. **Dependencias:** `npm install`
+2. **Ejecutar servidor local:** `npm run dev` o `ng serve`
+3. Navega a `http://localhost:4200/`
 
-```typescript
-export const environment = {
-  production: false,
-  apiProductos: 'http://localhost:8081/api/productos',
-  apiCarrito:   'http://localhost:8083/api/carrito',
-  apiPedidos:   'http://localhost:8082/api/pedidos'
-};
-```
+> **Nota de compatibilidad MSAL:** Las URLs de redirección están configuradas de forma dinámica con `window.location.origin`, lo que significa que el login funcionará sin modificaciones tanto en `localhost:4200` como en la IP pública de AWS, siempre que ambas estén registradas en el portal de Azure App Registrations.
 
-### `src/environments/environment.prod.ts` — Azure / AWS
+## 👥 Arquitectura General
 
-```typescript
-export const environment = {
-  production: true,
-  // Reemplaza con la URL real de tu AWS API Gateway o Azure API Management
-  apiProductos: 'https://<api-gateway-id>.execute-api.<region>.amazonaws.com/prod/productos',
-  apiCarrito:   'https://<api-gateway-id>.execute-api.<region>.amazonaws.com/prod/carrito',
-  apiPedidos:   'https://<api-gateway-id>.execute-api.<region>.amazonaws.com/prod/pedidos'
-};
-```
-
-Luego actualizar cada servicio para importar `environment`:
-
-```typescript
-import { environment } from '../../../environments/environment';
-
-// En el servicio:
-private base = environment.apiProductos;
-```
-
-> ⚠️ **Nunca subas `environment.prod.ts` con URLs o credenciales reales a un repositorio público.**
-
----
-
-## 🧩 Arquitectura de Componentes
-
-```
-AppComponent (router-outlet)
-├── NavbarComponent          — Logo, nav links, botón del carrito (badge con signal)
-├── CarritoComponent         — Drawer lateral, lista de ítems, total, botón confirmar pedido
-├── CatalogoComponent        — Grid de productos, tabs por categoría (PIZZA/BEBIDA/SOUVENIR/ANIMATRONICO)
-└── OrdersComponent          — Historial de pedidos del usuario autenticado
-```
-
-### Estado reactivo del carrito
-
-El carrito usa **Angular Signals** (sin NgRx, sin BehaviorSubject):
-
-```typescript
-// carrito.service.ts
-carrito = signal<CarritoState>({ items: [], total: 0 });
-abierto = signal<boolean>(false);
-```
-
-Esto permite reactividad sin necesidad de `async pipe` en templates modernos (`@if`, `@for`).
-
----
-
-## 🔗 Conexión con los Microservicios
-
-| Servicio Angular | Microservicio destino | Puerto | Endpoints consumidos |
-|---|---|---|---|
-| `ProductoService` | `fazbear-productos` | `8081` | `GET /api/productos`, `GET /api/productos/{id}`, `GET /api/productos/categoria/{cat}` |
-| `CarritoService` | `fazbear-carrito` | `8083` | `GET/POST /api/carrito` |
-| `PedidoService` | `fazbear-pedidos` | `8082` | `GET /api/pedidos`, `GET /api/pedidos/usuario/{id}`, `POST /api/pedidos`, `PUT /api/pedidos/{id}/estado` |
-
----
-
-## 📦 Build de Producción
-
-```bash
-npm run build
-# Output en: dist/fazbear-frontend/browser/
-```
-
-La carpeta `dist/` contiene los assets estáticos listos para servir. **No subas `dist/` al repositorio** (está en `.gitignore`).
-
----
-
-## ☁️ Despliegue Cloud
-
-### Opción A — Azure Static Web Apps (recomendado)
-
-1. Conectar el repositorio GitHub a Azure Static Web Apps
-2. Configurar `app_location: "fazbear-frontend"`, `output_location: "dist/fazbear-frontend/browser"`
-3. Azure genera automáticamente un pipeline CI/CD con GitHub Actions
-
-### Opción B — AWS S3 + CloudFront
-
-```bash
-# Build
-npm run build
-
-# Sync a S3
-aws s3 sync dist/fazbear-frontend/browser/ s3://<tu-bucket>/ --delete
-
-# Invalidar caché CloudFront
-aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"
-```
-
-> En ambas opciones, los microservicios backend deben estar detrás de un **AWS API Gateway** o **Azure API Management** con CORS configurado para el dominio del frontend.
-
----
-
-## 📝 Notas de Desarrollo
-
-### Categorías de producto válidas
-
-Las categorías son un tipo `union` en TypeScript y un `String` en el backend Java:
-
-```typescript
-type Categoria = 'TODOS' | 'PIZZA' | 'BEBIDA' | 'SOUVENIR' | 'ANIMATRONICO';
-```
-
-### Template Angular inline con backticks — Regla importante
-
-El template del componente usa backticks de TypeScript. **Evitar `${{`** — TypeScript lo interpreta como template literal JS, no como interpolación Angular:
-
-```html
-<!-- ❌ MAL — rompe el compilador TypeScript -->
-${{ producto.precio }}
-
-<!-- ✅ BIEN — $ dentro del binding Angular -->
-{{ '$' + producto.precio }}
-
-<!-- ✅ MEJOR — usar CurrencyPipe (requiere import CurrencyPipe en imports:[]) -->
-{{ producto.precio | currency:'USD' }}
-```
-
-### Scripts disponibles
-
-| Script | Comando | Descripción |
-|---|---|---|
-| `start` | `ng serve` | Dev server en `:4200` con live reload |
-| `build` | `ng build` | Build de producción en `dist/` |
-| `watch` | `ng build --watch` | Build incremental en modo desarrollo |
-| `test` | `ng test` | Tests unitarios con Vitest |
-
----
-
-*Freddy Fazbear's Pizza © 1987 — "Where fantasy and fun come to life!"* 🐻
+Este frontend es solo una de 4 piezas en la nube. Se conecta mediante API Gateway a:
+- `fazbear-productos` (Spring Boot)
+- `fazbear-carrito` (Spring Boot)
+- `fazbear-pedidos` (Spring Boot)
