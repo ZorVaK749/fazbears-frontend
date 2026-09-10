@@ -14,13 +14,21 @@ RUN npm run build -- --configuration production
 # ─── FASE 2: Servir con Nginx ────────────────────────────────────────────────
 FROM nginx:1.27-alpine
 
+# Instalar OpenSSL y generar certificado autofirmado para soportar HTTPS (requerido por Azure Entra ID)
+RUN apk add --no-cache openssl
+RUN mkdir -p /etc/nginx/ssl && \
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/cert.key \
+    -out /etc/nginx/ssl/cert.crt \
+    -subj "/C=US/ST=State/L=City/O=Fazbear/CN=localhost"
+
 # Copiar el build de Angular (la carpeta dist/fazbear-frontend/browser)
 COPY --from=build /app/dist/fazbear-frontend/browser /usr/share/nginx/html
 
 # Reemplazar la configuración por defecto de Nginx con la nuestra
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Puerto 80 expuesto
-EXPOSE 80
+# Puertos 80 (HTTP) y 443 (HTTPS) expuestos
+EXPOSE 80 443
 
 CMD ["nginx", "-g", "daemon off;"]
