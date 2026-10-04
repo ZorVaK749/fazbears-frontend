@@ -9,7 +9,7 @@ export interface Producto {
   descripcion: string;
   precio: number;
   categoria: 'PIZZA' | 'BEBIDA' | 'SOUVENIR' | 'ANIMATRONICO';
-  imagenUrl: string;
+  imagenUrl?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

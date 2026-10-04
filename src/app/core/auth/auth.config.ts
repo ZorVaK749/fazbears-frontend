@@ -69,9 +69,6 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   protectedResourceMap.set(environment.apiCarrito, [API_SCOPE]);
   protectedResourceMap.set(environment.apiPedidos, [API_SCOPE]);
 
-  // Cuando tengas las URLs de AWS API Gateway, agrégalas aquí también:
-  // protectedResourceMap.set('https://<gateway>.execute-api.<region>.amazonaws.com/prod/*', [API_SCOPE]);
-
   return {
     interactionType: InteractionType.Redirect,
     protectedResourceMap,

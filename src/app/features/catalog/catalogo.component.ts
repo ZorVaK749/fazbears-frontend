@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { ProductoService, Producto } from '../../core/services/producto.service';
 import { CarritoService } from '../../core/services/carrito.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
@@ -172,6 +172,7 @@ interface CategoriaTab {
 export class CatalogoComponent implements OnInit {
   private productoSvc = inject(ProductoService);
   private carritoSvc = inject(CarritoService);
+  private cdr = inject(ChangeDetectorRef);
 
   todos: Producto[] = [];
   productosFiltrados: Producto[] = [];
@@ -196,8 +197,13 @@ export class CatalogoComponent implements OnInit {
         this.todos = data;
         this.productosFiltrados = data;
         this.cargando = false;
+        this.cdr.detectChanges(); // Fix: MSAL responde fuera de Angular Zone
       },
-      error: () => { this.cargando = false; this.error = true; }
+      error: () => {
+        this.cargando = false;
+        this.error = true;
+        this.cdr.detectChanges(); // Fix: forzar actualización en caso de error
+      }
     });
   }
 
