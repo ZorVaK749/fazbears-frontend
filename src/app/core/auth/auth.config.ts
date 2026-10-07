@@ -67,9 +67,8 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/productos', [API_SCOPE]);
   protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/carrito', [API_SCOPE]);
   protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/pedidos', [API_SCOPE]);
-
-  // Cuando tengas las URLs de AWS API Gateway, agrégalas aquí también:
-  // protectedResourceMap.set('https://<gateway>.execute-api.<region>.amazonaws.com/prod/*', [API_SCOPE]);
+  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/orden', [API_SCOPE]);
+  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/reportes', [API_SCOPE]);
 
   return {
     interactionType: InteractionType.Redirect,

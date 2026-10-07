@@ -2,17 +2,17 @@ import { Routes } from '@angular/router';
 import { MsalGuard } from '@azure/msal-angular';
 
 export const routes: Routes = [
-  // Raíz → redirige a login si no autenticado, o a catálogo si ya lo está
+  // Raíz → catálogo
   { path: '', redirectTo: 'catalogo', pathMatch: 'full' },
 
-  // Página de login — no requiere autenticación
+  // Login — no requiere autenticación
   {
     path: 'login',
     loadComponent: () =>
       import('./features/auth/login/login.component').then(m => m.LoginComponent),
   },
 
-  // Catálogo — protegido: redirige a Microsoft login si no hay sesión
+  // Catálogo — protegido
   {
     path: 'catalogo',
     loadComponent: () =>
@@ -20,11 +20,27 @@ export const routes: Routes = [
     canActivate: [MsalGuard],
   },
 
-  // Pedidos — protegido
+  // Pedidos — protegido (clientes ven los suyos, admin ve todos)
   {
     path: 'pedidos',
     loadComponent: () =>
       import('./features/orders/orders.component').then(m => m.OrdersComponent),
+    canActivate: [MsalGuard],
+  },
+
+  // Perfil de usuario — protegido
+  {
+    path: 'perfil',
+    loadComponent: () =>
+      import('./features/perfil/perfil.component').then(m => m.PerfilComponent),
+    canActivate: [MsalGuard],
+  },
+
+  // Reportes — protegido (el componente redirige a /catalogo si no es admin)
+  {
+    path: 'reportes',
+    loadComponent: () =>
+      import('./features/reportes/reportes.component').then(m => m.ReportesComponent),
     canActivate: [MsalGuard],
   },
 
