@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CarritoService } from '../../core/services/carrito.service';
-import { PedidoService } from '../../core/services/pedido.service';
+import { OrdenService } from '../../core/services/orden.service';
+import { MsalService } from '@azure/msal-angular';
 
 @Component({
   selector: 'app-carrito',
@@ -41,7 +42,7 @@ import { PedidoService } from '../../core/services/pedido.service';
               <button class="btn-ctrl" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad - 1)">−</button>
               <span class="pixel item-cant">{{ item.cantidad }}</span>
               <button class="btn-ctrl" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad + 1)">+</button>
-              <button class="btn-quitar" (click)="carritoSvc.quitarItem(item.productoId)">🗑</button>
+              <button class="btn-quitar" title="Quitar del carrito" (click)="carritoSvc.quitarItem(item.productoId)">🗑</button>
             </div>
           </div>
         }
@@ -58,11 +59,17 @@ import { PedidoService } from '../../core/services/pedido.service';
           </div>
 
           @if (pedidoOk) {
-            <p class="pixel text-neon-green pedido-ok blink">✓ ¡PEDIDO ENVIADO!</p>
+            <div class="pedido-ok-box">
+              <p class="pixel text-neon-green blink">✓ ¡ORDEN ENVIADA!</p>
+              <p class="pedido-ok-sub">Recibirás un correo de confirmación 📧</p>
+            </div>
+          } @else if (errorMsg) {
+            <p class="pixel pedido-error">⚠ {{ errorMsg }}</p>
+            <button class="btn-neon btn-confirmar" (click)="confirmarOrden()">REINTENTAR</button>
           } @else {
-            <button class="btn-neon btn-confirmar" [disabled]="enviando" (click)="confirmarPedido()">
+            <button class="btn-neon btn-confirmar" [disabled]="enviando" (click)="confirmarOrden()">
               @if (enviando) { <span class="blink">PROCESANDO...</span> }
-              @else { CONFIRMAR PEDIDO }
+              @else { CONFIRMAR ORDEN }
             </button>
           }
 
@@ -86,7 +93,6 @@ import { PedidoService } from '../../core/services/pedido.service';
       transition: transform 0.35s cubic-bezier(.4,0,.2,1);
     }
     .carrito-abierto { transform: translateX(0); }
-
     .carrito-header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 1.2rem 1.5rem;
@@ -100,12 +106,9 @@ import { PedidoService } from '../../core/services/pedido.service';
       transition: color 0.2s, border-color 0.2s;
     }
     .btn-cerrar:hover { color: var(--fnaf-red); border-color: var(--fnaf-red); }
-
     .carrito-items { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-
     .carrito-vacio { text-align: center; padding: 3rem 1rem; }
     .carrito-hint { color: var(--fnaf-muted); font-size: 0.85rem; }
-
     .carrito-item {
       background: var(--fnaf-surface2); border: 1px solid var(--fnaf-border);
       padding: 0.75rem; border-radius: 3px;
@@ -125,11 +128,9 @@ import { PedidoService } from '../../core/services/pedido.service';
     .item-cant { font-size: 1rem; min-width: 24px; text-align: center; color: var(--fnaf-text); }
     .btn-quitar {
       background: transparent; border: none; cursor: pointer;
-      font-size: 0.9rem; margin-left: auto; opacity: 0.5;
-      transition: opacity 0.2s;
+      font-size: 0.9rem; margin-left: auto; opacity: 0.5; transition: opacity 0.2s;
     }
     .btn-quitar:hover { opacity: 1; }
-
     .carrito-footer {
       padding: 1.2rem 1.5rem;
       border-top: 1px solid var(--fnaf-border);
@@ -148,21 +149,30 @@ import { PedidoService } from '../../core/services/pedido.service';
       transition: color 0.2s, border-color 0.2s;
     }
     .btn-vaciar:hover { color: var(--fnaf-red); border-color: var(--fnaf-red); }
-    .pedido-ok { text-align: center; font-size: 1.1rem; }
+    .pedido-ok-box { text-align: center; padding: 0.5rem 0; }
+    .pedido-ok-box .pixel { font-size: 1.1rem; }
+    .pedido-ok-sub { color: var(--fnaf-muted); font-size: 0.8rem; margin-top: 0.3rem; }
+    .pedido-error { color: var(--fnaf-red); font-size: 0.8rem; text-align: center; margin: 0; }
   `]
 })
 export class CarritoComponent {
   carritoSvc = inject(CarritoService);
-  pedidoSvc  = inject(PedidoService);
-  enviando   = false;
-  pedidoOk   = false;
+  private ordenSvc = inject(OrdenService);
+  private msalSvc = inject(MsalService);
+  enviando = false;
+  pedidoOk = false;
+  errorMsg = '';
 
-  confirmarPedido() {
+  confirmarOrden() {
     if (this.carritoSvc.carrito().items.length === 0) return;
+    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
+
     this.enviando = true;
-    const pedido = {
-      usuarioId:    'usuario-local',
-      emailUsuario: 'usuario@fazbear.com',
+    this.errorMsg = '';
+
+    const payload = {
+      usuarioId:    cuenta?.localAccountId ?? 'anonimo',
+      emailUsuario: cuenta?.username ?? 'cliente@fazbear.com',
       items: this.carritoSvc.carrito().items.map(i => ({
         productoId:     i.productoId,
         nombreProducto: i.nombreProducto,
@@ -170,14 +180,21 @@ export class CarritoComponent {
         precioUnitario: i.precioUnitario
       }))
     };
-    this.pedidoSvc.crear(pedido).subscribe({
+
+    this.ordenSvc.confirmar(payload).subscribe({
       next: () => {
-        this.enviando  = false;
-        this.pedidoOk  = true;
+        this.enviando = false;
+        this.pedidoOk = true;
         this.carritoSvc.vaciar();
-        setTimeout(() => { this.pedidoOk = false; this.carritoSvc.cerrarCarrito(); }, 2500);
+        setTimeout(() => {
+          this.pedidoOk = false;
+          this.carritoSvc.cerrarCarrito();
+        }, 3000);
       },
-      error: () => { this.enviando = false; }
+      error: () => {
+        this.enviando = false;
+        this.errorMsg = 'Error al procesar la orden. Intenta nuevamente.';
+      }
     });
   }
 }

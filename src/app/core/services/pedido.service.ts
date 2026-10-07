@@ -9,13 +9,15 @@ export interface ItemPedido {
   precioUnitario: number;
 }
 
+export type EstadoPedido = 'PENDIENTE' | 'PREPARANDO' | 'COMPLETADO' | 'CANCELADO';
+
 export interface Pedido {
   id?: number;
   usuarioId: string;
   emailUsuario: string;
   fechaCreacion?: string;
   total?: number;
-  estado?: 'PENDIENTE' | 'PREPARANDO' | 'COMPLETADO';
+  estado?: EstadoPedido;
   items: ItemPedido[];
 }
 
@@ -37,7 +39,15 @@ export class PedidoService {
     return this.http.post<Pedido>(this.base, pedido);
   }
 
-  actualizarEstado(id: number, estado: string): Observable<Pedido> {
+  actualizarEstado(id: number, estado: EstadoPedido): Observable<Pedido> {
     return this.http.put<Pedido>(`${this.base}/${id}/estado`, { estado });
+  }
+
+  cancelar(id: number): Observable<Pedido> {
+    return this.http.put<Pedido>(`${this.base}/${id}/estado`, { estado: 'CANCELADO' });
+  }
+
+  eliminar(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}`);
   }
 }
