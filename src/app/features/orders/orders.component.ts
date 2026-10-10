@@ -3,6 +3,7 @@ import { PedidoService, Pedido, EstadoPedido } from '../../core/services/pedido.
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CarritoComponent } from '../cart/carrito.component';
 import { RouterLink } from '@angular/router';
+import { SlicePipe } from '@angular/common';
 import { MsalService } from '@azure/msal-angular';
 
 // Emails que tienen acceso de administrador
@@ -11,7 +12,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [NavbarComponent, CarritoComponent, RouterLink],
+  imports: [NavbarComponent, CarritoComponent, RouterLink, SlicePipe],
   template: `
     <app-navbar />
 
