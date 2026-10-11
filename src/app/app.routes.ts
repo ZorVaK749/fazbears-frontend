@@ -44,6 +44,14 @@ export const routes: Routes = [
     canActivate: [MsalGuard],
   },
 
+  // Checkout / Pasarela de pago — protegido
+  {
+    path: 'checkout',
+    loadComponent: () =>
+      import('./features/checkout/checkout.component').then(m => m.CheckoutComponent),
+    canActivate: [MsalGuard],
+  },
+
   // Wildcard → login
   { path: '**', redirectTo: 'login' },
 ];
