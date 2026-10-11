@@ -1,7 +1,6 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { CarritoService } from '../../core/services/carrito.service';
-import { OrdenService } from '../../core/services/orden.service';
-import { MsalService } from '@azure/msal-angular';
 
 @Component({
   selector: 'app-carrito',
@@ -58,20 +57,9 @@ import { MsalService } from '@azure/msal-angular';
             </span>
           </div>
 
-          @if (pedidoOk) {
-            <div class="pedido-ok-box">
-              <p class="pixel text-neon-green blink">✓ ¡ORDEN ENVIADA!</p>
-              <p class="pedido-ok-sub">Recibirás un correo de confirmación 📧</p>
-            </div>
-          } @else if (errorMsg) {
-            <p class="pixel pedido-error">⚠ {{ errorMsg }}</p>
-            <button class="btn-neon btn-confirmar" (click)="confirmarOrden()">REINTENTAR</button>
-          } @else {
-            <button class="btn-neon btn-confirmar" [disabled]="enviando" (click)="confirmarOrden()">
-              @if (enviando) { <span class="blink">PROCESANDO...</span> }
-              @else { CONFIRMAR ORDEN }
-            </button>
-          }
+          <button class="btn-neon btn-confirmar pixel" (click)="irAlPago()">
+            PROCEDER AL PAGO 💳
+          </button>
 
           <button class="btn-vaciar" (click)="carritoSvc.vaciar()">VACIAR CARRITO</button>
         </div>
@@ -157,44 +145,10 @@ import { MsalService } from '@azure/msal-angular';
 })
 export class CarritoComponent {
   carritoSvc = inject(CarritoService);
-  private ordenSvc = inject(OrdenService);
-  private msalSvc = inject(MsalService);
-  enviando = false;
-  pedidoOk = false;
-  errorMsg = '';
+  private router = inject(Router);
 
-  confirmarOrden() {
-    if (this.carritoSvc.carrito().items.length === 0) return;
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
-
-    this.enviando = true;
-    this.errorMsg = '';
-
-    const payload = {
-      usuarioId:    cuenta?.localAccountId ?? 'anonimo',
-      emailUsuario: cuenta?.username ?? 'cliente@fazbear.com',
-      items: this.carritoSvc.carrito().items.map(i => ({
-        productoId:     i.productoId,
-        nombreProducto: i.nombreProducto,
-        cantidad:       i.cantidad,
-        precioUnitario: i.precioUnitario
-      }))
-    };
-
-    this.ordenSvc.confirmar(payload).subscribe({
-      next: () => {
-        this.enviando = false;
-        this.pedidoOk = true;
-        this.carritoSvc.vaciar();
-        setTimeout(() => {
-          this.pedidoOk = false;
-          this.carritoSvc.cerrarCarrito();
-        }, 3000);
-      },
-      error: () => {
-        this.enviando = false;
-        this.errorMsg = 'Error al procesar la orden. Intenta nuevamente.';
-      }
-    });
+  irAlPago() {
+    this.carritoSvc.cerrarCarrito();
+    this.router.navigate(['/checkout']);
   }
 }
