@@ -1,10 +1,12 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { CarritoService } from '../../core/services/carrito.service';
 
 @Component({
   selector: 'app-carrito',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(document:keydown.escape)': 'carritoSvc.cerrarCarrito()' },
   imports: [],
   template: `
     <!-- Overlay oscuro al abrir -->
@@ -13,11 +15,14 @@ import { CarritoService } from '../../core/services/carrito.service';
     }
 
     <!-- Panel lateral -->
-    <aside class="carrito-panel" [class.carrito-abierto]="carritoSvc.abierto()">
+    <aside class="carrito-panel" aria-label="Carrito de compras"
+           [class.carrito-abierto]="carritoSvc.abierto()"
+           [attr.aria-hidden]="!carritoSvc.abierto()"
+           [attr.inert]="carritoSvc.abierto() ? null : ''">
       <!-- Header -->
       <div class="carrito-header">
         <h2 class="pixel text-neon-cyan">🛒 CARRITO</h2>
-        <button class="btn-cerrar pixel" (click)="carritoSvc.cerrarCarrito()">✕</button>
+        <button class="btn-cerrar pixel" aria-label="Cerrar carrito" (click)="carritoSvc.cerrarCarrito()">✕</button>
       </div>
 
       <!-- Items -->
@@ -69,18 +74,26 @@ import { CarritoService } from '../../core/services/carrito.service';
   styles: [`
     .carrito-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-      z-index: 200; backdrop-filter: blur(2px);
+      /* Sin blur de pantalla completa: evita recomponer el catálogo en CPU. */
+      z-index: 200;
     }
     .carrito-panel {
       position: fixed; top: 0; right: 0; height: 100vh; width: 360px;
+      height: 100dvh; max-width: 100vw;
       background: var(--fnaf-surface);
       border-left: 1px solid var(--fnaf-border);
-      box-shadow: -4px 0 30px rgba(0,0,0,0.5);
+      box-shadow: -4px 0 12px rgba(0,0,0,0.4);
       z-index: 300; display: flex; flex-direction: column;
       transform: translateX(100%);
-      transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+      visibility: hidden;
+      contain: layout style;
+      transition: transform 0.2s ease-out, visibility 0s 0.2s;
     }
-    .carrito-abierto { transform: translateX(0); }
+    .carrito-abierto { transform: translateX(0); visibility: visible; transition-delay: 0s; }
+    @media (prefers-reduced-motion: reduce) {
+      .carrito-panel { transition: none; }
+      .carrito-panel .blink { animation: none; }
+    }
     .carrito-header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 1.2rem 1.5rem;
@@ -94,7 +107,7 @@ import { CarritoService } from '../../core/services/carrito.service';
       transition: color 0.2s, border-color 0.2s;
     }
     .btn-cerrar:hover { color: var(--fnaf-red); border-color: var(--fnaf-red); }
-    .carrito-items { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .carrito-items { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
     .carrito-vacio { text-align: center; padding: 3rem 1rem; }
     .carrito-hint { color: var(--fnaf-muted); font-size: 0.85rem; }
     .carrito-item {
