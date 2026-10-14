@@ -1,4 +1,6 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize, timeout } from 'rxjs';
 import { ReportesService, ResumenReporte } from '../../core/services/reportes.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
@@ -10,6 +12,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 @Component({
   selector: 'app-reportes',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NavbarComponent, RouterLink],
   template: `
     <app-navbar />
@@ -26,40 +29,40 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
         <div class="admin-badge pixel">⚙ ACCESO RESTRINGIDO — SOLO ADMINISTRADORES</div>
       </header>
 
-      @if (cargando) {
+      @if (cargando()) {
         <div class="loading-grid">
           <p class="pixel text-neon-cyan blink">[ CARGANDO DATOS... ]</p>
         </div>
       }
 
-      @if (!cargando && resumen) {
+      @if (!cargando() && resumen(); as reporte) {
         <!-- KPI Cards -->
         <div class="kpi-grid">
           <div class="kpi-card">
             <span class="kpi-icon">📦</span>
-            <div class="kpi-valor pixel text-neon-cyan">{{ resumen.totalPedidos }}</div>
+            <div class="kpi-valor pixel text-neon-cyan">{{ reporte.totalPedidos }}</div>
             <div class="kpi-label">PEDIDOS TOTALES</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">💰</span>
-            <div class="kpi-valor pixel text-neon-green">\${{ resumen.ingresosTotales.toFixed(2) }}</div>
+            <div class="kpi-valor pixel text-neon-green">\${{ reporte.ingresosTotales.toFixed(2) }}</div>
             <div class="kpi-label">INGRESOS TOTALES</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">⏳</span>
-            <div class="kpi-valor pixel text-neon-yellow">\${{ resumen.promedioPerPedido.toFixed(2) }}</div>
+            <div class="kpi-valor pixel text-neon-yellow">\${{ reporte.promedioPerPedido.toFixed(2) }}</div>
             <div class="kpi-label">PROMEDIO POR PEDIDO</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">✅</span>
-            <div class="kpi-valor pixel text-neon-purple">{{ resumen.ventas.length }}</div>
+            <div class="kpi-valor pixel text-neon-purple">{{ reporte.ventas.length }}</div>
             <div class="kpi-label">VENTAS REGISTRADAS</div>
           </div>
         </div>
 
         <div class="panel panel-full">
             <h2 class="pixel panel-title text-neon-cyan">📋 VENTAS RECIBIDAS POR RABBITMQ</h2>
-            @if (resumen.ventas.length) {
+            @if (reporte.ventas.length) {
               <table class="mini-table">
                 <thead>
                   <tr>
@@ -69,7 +72,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                   </tr>
                 </thead>
                 <tbody>
-                  @for (venta of resumen.ventas; track $index) {
+                  @for (venta of reporte.ventas; track $index) {
                     <tr>
                       <td class="pixel text-neon-yellow">#{{ venta.pedidoId }}</td>
                       <td>{{ formatDay(venta.fechaCreacion) }}</td>
@@ -84,10 +87,10 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
         </div>
       }
 
-      @if (!cargando && !resumen) {
-        <div class="error-box">
+      @if (!cargando() && !resumen()) {
+        <div class="error-box" role="alert">
           <p class="pixel text-neon-red">[ ERROR AL CARGAR REPORTES ]</p>
-          <p style="color:var(--fnaf-muted)">Verifica que ms-reportes esté corriendo y conectado.</p>
+          <p style="color:var(--fnaf-muted)">{{ errorMsg() }}</p>
           <button class="btn-neon" style="margin-top:1rem" (click)="cargar()">REINTENTAR</button>
         </div>
       }
@@ -176,9 +179,11 @@ export class ReportesComponent implements OnInit {
   private reportesSvc = inject(ReportesService);
   private msalSvc     = inject(MsalService);
   private router      = inject(Router);
+  private destroyRef  = inject(DestroyRef);
 
-  resumen: ResumenReporte | null = null;
-  cargando = true;
+  resumen = signal<ResumenReporte | null>(null);
+  cargando = signal(true);
+  errorMsg = signal('');
 
   ngOnInit() {
     const cuenta = this.msalSvc.instance.getAllAccounts()[0];
@@ -188,10 +193,24 @@ export class ReportesComponent implements OnInit {
   }
 
   cargar() {
-    this.cargando = true;
-    this.reportesSvc.getResumen().subscribe({
-      next: (r) => { this.resumen = r; this.cargando = false; },
-      error: () => { this.cargando = false; }
+    this.cargando.set(true);
+    this.resumen.set(null);
+    this.errorMsg.set('');
+    this.reportesSvc.getResumen().pipe(
+      timeout(15000),
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.cargando.set(false)),
+    ).subscribe({
+      next: (r) => this.resumen.set(r),
+      error: (err) => {
+        if (err.name === 'TimeoutError') {
+          this.errorMsg.set('El servicio tardó demasiado en responder. Puedes reintentar.');
+        } else if (err.status === 401 || err.status === 403) {
+          this.errorMsg.set('No se pudo autorizar la consulta. Revisa tu sesión y permisos.');
+        } else {
+          this.errorMsg.set(`No se pudieron cargar los reportes (${err.status || 'Red'}). Puedes reintentar.`);
+        }
+      },
     });
   }
 
