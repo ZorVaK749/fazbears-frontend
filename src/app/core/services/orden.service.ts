@@ -10,12 +10,10 @@ export interface ConfirmarOrdenRequest {
 }
 
 export interface OrdenResponse {
-  id: number;
-  usuarioId: string;
-  emailUsuario: string;
+  pedidoId: number;
+  mensaje: string;
   estado: string;
   total: number;
-  fechaCreacion: string;
 }
 
 @Injectable({ providedIn: 'root' })
