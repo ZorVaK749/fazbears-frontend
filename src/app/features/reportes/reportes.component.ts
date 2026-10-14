@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { ReportesService, ResumenReporte, IngresosReporte } from '../../core/services/reportes.service';
+import { ReportesService, ResumenReporte } from '../../core/services/reportes.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
@@ -42,57 +42,38 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">💰</span>
-            <div class="kpi-valor pixel text-neon-green">\${{ resumen.totalIngresos?.toFixed(2) }}</div>
+            <div class="kpi-valor pixel text-neon-green">\${{ resumen.ingresosTotales.toFixed(2) }}</div>
             <div class="kpi-label">INGRESOS TOTALES</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">⏳</span>
-            <div class="kpi-valor pixel text-neon-yellow">{{ resumen.pedidosPorEstado?.['PENDIENTE'] ?? 0 }}</div>
-            <div class="kpi-label">PENDIENTES</div>
+            <div class="kpi-valor pixel text-neon-yellow">\${{ resumen.promedioPerPedido.toFixed(2) }}</div>
+            <div class="kpi-label">PROMEDIO POR PEDIDO</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">✅</span>
-            <div class="kpi-valor pixel text-neon-purple">{{ resumen.pedidosPorEstado?.['COMPLETADO'] ?? 0 }}</div>
-            <div class="kpi-label">COMPLETADOS</div>
+            <div class="kpi-valor pixel text-neon-purple">{{ resumen.ventas.length }}</div>
+            <div class="kpi-label">VENTAS REGISTRADAS</div>
           </div>
         </div>
 
-        <!-- Estados de pedidos -->
-        <div class="section-grid">
-          <div class="panel">
-            <h2 class="pixel panel-title text-neon-purple">📈 PEDIDOS POR ESTADO</h2>
-            <div class="estado-bars">
-              @for (entry of estadosEntries; track entry.key) {
-                <div class="bar-row">
-                  <span class="bar-label pixel" [class]="estadoColor(entry.key)">{{ entry.key }}</span>
-                  <div class="bar-track">
-                    <div class="bar-fill" [class]="estadoColor(entry.key)"
-                         [style.width]="barWidth(entry.value) + '%'"></div>
-                  </div>
-                  <span class="bar-count pixel">{{ entry.value }}</span>
-                </div>
-              }
-            </div>
-          </div>
-
-          <!-- Productos más vendidos -->
-          <div class="panel">
-            <h2 class="pixel panel-title text-neon-cyan">🍕 PRODUCTOS MÁS VENDIDOS</h2>
-            @if (resumen.productosMasVendidos?.length) {
+        <div class="panel panel-full">
+            <h2 class="pixel panel-title text-neon-cyan">📋 VENTAS RECIBIDAS POR RABBITMQ</h2>
+            @if (resumen.ventas.length) {
               <table class="mini-table">
                 <thead>
                   <tr>
-                    <th class="pixel">#</th>
-                    <th class="pixel">PRODUCTO</th>
-                    <th class="pixel">UNIDADES</th>
+                    <th class="pixel">PEDIDO</th>
+                    <th class="pixel">FECHA</th>
+                    <th class="pixel">TOTAL</th>
                   </tr>
                 </thead>
                 <tbody>
-                  @for (prod of resumen.productosMasVendidos; track prod.nombre; let i = $index) {
+                  @for (venta of resumen.ventas; track $index) {
                     <tr>
-                      <td class="pixel text-neon-yellow">{{ i + 1 }}</td>
-                      <td>{{ prod.nombre }}</td>
-                      <td class="pixel text-neon-green">{{ prod.cantidad }}</td>
+                      <td class="pixel text-neon-yellow">#{{ venta.pedidoId }}</td>
+                      <td>{{ formatDay(venta.fechaCreacion) }}</td>
+                      <td class="pixel text-neon-green">\${{ venta.total.toFixed(2) }}</td>
                     </tr>
                   }
                 </tbody>
@@ -100,27 +81,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
             } @else {
               <p class="no-data pixel">[ SIN DATOS AÚN ]</p>
             }
-          </div>
         </div>
-
-        <!-- Ingresos por día -->
-        @if (ingresos?.ingresosPorDia?.length) {
-          <div class="panel panel-full">
-            <h2 class="pixel panel-title text-neon-green">💵 INGRESOS POR DÍA</h2>
-            <div class="day-chart">
-              @for (dia of ingresos!.ingresosPorDia; track dia.fecha) {
-                <div class="day-col">
-                  <div class="day-bar-wrap">
-                    <div class="day-bar" [style.height]="dayHeight(dia.total) + '%'"
-                         title="\${{ dia.total.toFixed(2) }}"></div>
-                  </div>
-                  <span class="day-val pixel text-neon-green">\${{ dia.total.toFixed(0) }}</span>
-                  <span class="day-label">{{ formatDay(dia.fecha) }}</span>
-                </div>
-              }
-            </div>
-          </div>
-        }
       }
 
       @if (!cargando && !resumen) {
@@ -217,17 +178,7 @@ export class ReportesComponent implements OnInit {
   private router      = inject(Router);
 
   resumen: ResumenReporte | null = null;
-  ingresos: IngresosReporte | null = null;
   cargando = true;
-
-  get estadosEntries(): { key: string; value: number }[] {
-    if (!this.resumen?.pedidosPorEstado) return [];
-    return Object.entries(this.resumen.pedidosPorEstado).map(([key, value]) => ({ key, value }));
-  }
-
-  get maxEstado(): number {
-    return Math.max(...this.estadosEntries.map(e => e.value), 1);
-  }
 
   ngOnInit() {
     const cuenta = this.msalSvc.instance.getAllAccounts()[0];
@@ -242,18 +193,6 @@ export class ReportesComponent implements OnInit {
       next: (r) => { this.resumen = r; this.cargando = false; },
       error: () => { this.cargando = false; }
     });
-    this.reportesSvc.getIngresos().subscribe({
-      next: (i) => { this.ingresos = i; }
-    });
-  }
-
-  barWidth(val: number): number {
-    return Math.round((val / this.maxEstado) * 100);
-  }
-
-  dayHeight(val: number): number {
-    const max = Math.max(...(this.ingresos?.ingresosPorDia?.map(d => d.total) ?? [1]));
-    return Math.round((val / max) * 100);
   }
 
   estadoColor(estado: string): string {

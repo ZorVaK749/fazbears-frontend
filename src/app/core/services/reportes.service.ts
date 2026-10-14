@@ -4,14 +4,14 @@ import { Observable } from 'rxjs';
 
 export interface ResumenReporte {
   totalPedidos: number;
-  totalIngresos: number;
-  pedidosPorEstado: Record<string, number>;
-  productosMasVendidos: { nombre: string; cantidad: number }[];
+  ingresosTotales: number;
+  promedioPerPedido: number;
+  ventas: { pedidoId: number; usuarioId: string; total: number; fechaCreacion: string }[];
 }
 
 export interface IngresosReporte {
-  totalIngresos: number;
-  ingresosPorDia: { fecha: string; total: number }[];
+  ingresosTotales: number;
+  totalPedidos: number;
 }
 
 @Injectable({ providedIn: 'root' })

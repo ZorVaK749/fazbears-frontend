@@ -33,7 +33,7 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
             <p><strong>Método:</strong> {{ metodoSeleccionado }}</p>
             <p><strong>Ubicación de Entrega:</strong> {{ ubicacion }}</p>
             <p class="email-notice">
-              ✉️ Se envió un correo de confirmación a:
+              ✉️ El correo de confirmación se procesará de forma asíncrona para:
               <span class="user-email">{{ emailUsuario }}</span>
             </p>
           </div>
@@ -635,6 +635,7 @@ export class CheckoutComponent implements OnInit {
   }
 
   procesarPago() {
+    if (this.procesando || this.pagoExitoso) return;
     if (this.carritoSvc.carrito().items.length === 0) {
       this.errorMsg = 'El carrito está vacío';
       return;
@@ -674,10 +675,11 @@ export class CheckoutComponent implements OnInit {
     this.montoPagado = this.carritoSvc.carrito().total;
 
     this.ordenSvc.confirmar(payload).subscribe({
-      next: (res: any) => {
+      next: (res) => {
         this.procesando = false;
         this.pagoExitoso = true;
-        this.pedidoIdGenerado = res?.pedidoId ?? Math.floor(1000 + Math.random() * 9000);
+        this.pedidoIdGenerado = res.pedidoId;
+        this.montoPagado = res.total;
         this.carritoSvc.vaciar();
       },
       error: (err) => {
