@@ -1,11 +1,13 @@
-"""SSM deployment of the three approved EV2 images; never prints credentials.
+"""SSM deployment of approved EV2 images; never prints credentials.
 
 Run as root on the service EC2. Requires the approved pre-deployment backup.
-Does not deploy the frontend, delete containers, or certify RabbitMQ readiness.
+Default: three services. --frontend: only frontend. Does not delete containers.
+HTTP checks do not certify authentication, RabbitMQ, or the checkout flow.
 """
 
 import copy
 import http.client
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -14,7 +16,7 @@ import subprocess
 import sys
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import urlopen
 
 
@@ -23,6 +25,76 @@ BACKUPS = {
     "ms-notificaciones": ("pre-ev2-20261014T063647Z-f85824a5", 8085, "notificaciones"),
     "ms-reportes": ("pre-ev2-20261014T063647Z-e8622e65", 8086, "reportes"),
 }
+FRONTEND_BACKUP = {
+    "fz-frontend": ("pre-ev2-20261014T063648Z-ed98d845", 80, "frontend"),
+}
+
+
+class Assets(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.urls = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "script" and attrs.get("src"):
+            self.urls.append(attrs["src"])
+        if tag == "link" and attrs.get("rel") == "stylesheet" and attrs.get("href"):
+            self.urls.append(attrs["href"])
+
+
+def frontend_http_check(port):
+    base = f"http://127.0.0.1:{port}/"
+    for path in ("", "catalogo", "checkout", "reportes"):
+        with urlopen(base + path, timeout=3) as response:
+            html = response.read(2_000_000).decode("utf-8")
+            if response.status != 200 or "<app-root" not in html:
+                raise RuntimeError("Frontend did not serve the Angular HTML shell")
+        if not path:
+            parser = Assets()
+            parser.feed(html)
+            assets = set()
+            for source in parser.urls:
+                url = urljoin(base, source)
+                if urlsplit(url).netloc == urlsplit(base).netloc:
+                    assets.add(url)
+            if not any(urlsplit(url).path.endswith(".js") for url in assets):
+                raise RuntimeError("Angular JavaScript asset missing from index")
+            if not any(urlsplit(url).path.endswith(".css") for url in assets):
+                raise RuntimeError("Angular CSS asset missing from index")
+            for url in sorted(assets):
+                with urlopen(url, timeout=3) as asset:
+                    content_type = asset.headers.get("Content-Type", "").lower()
+                    suffix = urlsplit(url).path
+                    if asset.status != 200 or not asset.read(1):
+                        raise RuntimeError("Frontend asset unavailable or empty")
+                    if suffix.endswith(".css") and "text/css" not in content_type:
+                        raise RuntimeError("Unexpected CSS content type")
+                    if suffix.endswith(".js") and not any(t in content_type for t in ("javascript", "ecmascript")):
+                        raise RuntimeError("Unexpected JavaScript content type")
+
+
+def frontend_ready(name, image_id, port):
+    for _ in range(60):
+        state = inspect(name)
+        if state is None or state["Image"] != image_id or state.get("RestartCount", 0):
+            raise RuntimeError("Unexpected frontend image or container restart")
+        if state["State"]["Status"] in ("dead", "exited"):
+            raise RuntimeError("Frontend exited")
+        try:
+            frontend_http_check(port)
+        except (HTTPError, URLError, TimeoutError, OSError, RuntimeError):
+            time.sleep(2)
+            continue
+        time.sleep(10)
+        stable = inspect(name)
+        if not stable or not stable["State"]["Running"] or stable.get("RestartCount", 0):
+            raise RuntimeError("Frontend did not remain running")
+        frontend_http_check(port)
+        print("HTTP local 200: Angular, rutas SPA y archivos JS/CSS comprobados.")
+        print("Imagen frontend verificada y proceso estable; login/compra aun no comprobados.")
+        return
+    raise RuntimeError("Frontend HTML/assets startup verification timed out")
 
 
 class DockerSocket(http.client.HTTPConnection):
@@ -76,6 +148,8 @@ def creation_payload(current, original_image, new_image, release):
 
 
 def ready(name, image_id, port, service):
+    if service == "frontend":
+        return frontend_ready(name, image_id, port)
     url = f"http://127.0.0.1:{port}/api/{service}/health"
     for _ in range(90):
         state = inspect(name)
@@ -102,14 +176,15 @@ def ready(name, image_id, port, service):
     raise RuntimeError("Application HTTP startup timed out")
 
 
-def main():
+def main(frontend=False):
     os.umask(0o077)
-    found = [(name, inspect(name)) for name in BACKUPS]
+    backups = FRONTEND_BACKUP if frontend else BACKUPS
+    found = [(name, inspect(name)) for name in backups]
     found = [(name, state) for name, state in found if state]
     if len(found) != 1:
         raise RuntimeError("Expected exactly one supported service on this EC2")
     name, current = found[0]
-    folder, port, service = BACKUPS[name]
+    folder, port, service = backups[name]
     backup = Path("/var/lib/fazbear-backups") / folder
     release = json.loads((backup / "release.json").read_text())
     saved = json.loads((backup / "container-private.json").read_text())
@@ -177,7 +252,7 @@ def main():
     }, indent=2))
     print(f"DESPLEGADO: {name}, commit={release['commit']}, imagen={release['new_image']}")
     print(f"Anterior conservado y sin autoarranque: {previous}")
-    print("RabbitMQ y entrega de correo/reportes: pendientes de la tarea 3.")
+    print("Entrega E2E: requiere compra autenticada y comprobaciones posteriores.")
 
 
 def self_test():
@@ -202,6 +277,9 @@ def self_test():
     assert "Hostname" not in payload
     current["Config"]["Cmd"] = ["custom"]
     assert creation_payload(current, original, new, release)["Cmd"] == ["custom"]
+    parser = Assets()
+    parser.feed('<app-root></app-root><script src="main.js"></script><link rel="stylesheet" href="styles.css">')
+    assert parser.urls == ["main.js", "styles.css"]
     print("Self-test OK: entorno, puertos, version y overrides preservados. Docker no ejecutado.")
 
 
@@ -211,6 +289,8 @@ if __name__ == "__main__":
             self_test()
         elif not sys.argv[1:]:
             main()
+        elif sys.argv[1:] == ["--frontend"]:
+            main(frontend=True)
         else:
             raise RuntimeError("Unsupported arguments")
     except Exception as error:
