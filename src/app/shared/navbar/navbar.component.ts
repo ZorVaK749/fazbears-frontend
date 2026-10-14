@@ -154,6 +154,9 @@ export class NavbarComponent implements OnInit {
     if (cuentas.length > 0) {
       this.usuario = cuentas[0];
       this.esAdmin = ADMIN_EMAILS.includes(this.usuario.username ?? '');
+      // Restaura el carrito persistido (idempotente; App ya lo intentó
+      // tras el redirect de MSAL, esto cubre recargas y cambios de ruta).
+      this.carritoSvc.inicializar();
     }
   }
 
