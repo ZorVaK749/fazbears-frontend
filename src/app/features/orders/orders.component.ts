@@ -1,4 +1,6 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, ChangeDetectorRef, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { defer, finalize, Observable, take, timeout, TimeoutError } from 'rxjs';
 import { PedidoService, Pedido, EstadoPedido } from '../../core/services/pedido.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CarritoComponent } from '../cart/carrito.component';
@@ -32,6 +34,10 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
           <div class="admin-badge pixel">⚙ MODO ADMINISTRADOR</div>
         }
       </header>
+
+      @if (errorMsg()) {
+        <p role="alert" class="text-neon-red">{{ errorMsg() }}</p>
+      }
 
       @if (cargando) {
         <p class="pixel text-neon-cyan blink" style="text-align:center;padding:4rem">[ CARGANDO PEDIDOS... ]</p>
@@ -85,7 +91,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                       <button
                         id="btn-cancelar-{{ pedido.id }}"
                         class="btn-accion btn-cancelar pixel"
-                        [disabled]="procesando[pedido.id!]"
+                        [disabled]="procesando()[pedido.id!]"
                         (click)="cancelarPedido(pedido)">
                         ✕ CANCELAR
                       </button>
@@ -97,7 +103,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                         <button
                           id="btn-preparar-{{ pedido.id }}"
                           class="btn-accion btn-preparar pixel"
-                          [disabled]="procesando[pedido.id!]"
+                          [disabled]="procesando()[pedido.id!]"
                           (click)="cambiarEstado(pedido, 'PREPARANDO')">
                           🍕 PREPARAR
                         </button>
@@ -106,7 +112,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                         <button
                           id="btn-completar-{{ pedido.id }}"
                           class="btn-accion btn-completar pixel"
-                          [disabled]="procesando[pedido.id!]"
+                          [disabled]="procesando()[pedido.id!]"
                           (click)="cambiarEstado(pedido, 'COMPLETADO')">
                           ✓ COMPLETAR
                         </button>
@@ -115,14 +121,14 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                         <button
                           id="btn-eliminar-{{ pedido.id }}"
                           class="btn-accion btn-eliminar pixel"
-                          [disabled]="procesando[pedido.id!]"
+                          [disabled]="procesando()[pedido.id!]"
                           (click)="eliminarPedido(pedido)">
                           🗑 ELIMINAR
                         </button>
                       }
                     }
 
-                    @if (procesando[pedido.id!]) {
+                    @if (procesando()[pedido.id!]) {
                       <span class="pixel blink proc-txt">...</span>
                     }
                   </td>
@@ -207,10 +213,12 @@ export class OrdersComponent implements OnInit {
   private pedidoSvc = inject(PedidoService);
   private msalSvc   = inject(MsalService);
   private cdr       = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
 
   pedidos: Pedido[] = [];
   cargando = true;
-  procesando: Record<number, boolean> = {};
+  procesando = signal<Record<number, boolean>>({});
+  errorMsg = signal('');
   esAdmin = false;
   usuarioId = '';
 
@@ -232,39 +240,41 @@ export class OrdersComponent implements OnInit {
 
   cancelarPedido(pedido: Pedido) {
     if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.cancelar(pedido.id).subscribe({
-      next: (actualizado) => {
-        pedido.estado = actualizado.estado;
-        this.procesando[pedido.id!] = false;
-        this.cdr.detectChanges();
-      },
-      error: () => { this.procesando[pedido.id!] = false; }
+    const id = pedido.id;
+    this.ejecutarAccion(id, () => this.pedidoSvc.cancelar(id), actualizado => {
+      pedido.estado = actualizado.estado;
     });
   }
 
   cambiarEstado(pedido: Pedido, nuevoEstado: EstadoPedido) {
     if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.actualizarEstado(pedido.id, nuevoEstado).subscribe({
-      next: (actualizado) => {
-        pedido.estado = actualizado.estado;
-        this.procesando[pedido.id!] = false;
-        this.cdr.detectChanges();
-      },
-      error: () => { this.procesando[pedido.id!] = false; }
+    const id = pedido.id;
+    this.ejecutarAccion(id, () => this.pedidoSvc.actualizarEstado(id, nuevoEstado), actualizado => {
+      pedido.estado = actualizado.estado;
     });
   }
 
   eliminarPedido(pedido: Pedido) {
     if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.eliminar(pedido.id).subscribe({
-      next: () => {
-        this.pedidos = this.pedidos.filter(p => p.id !== pedido.id);
-        this.cdr.detectChanges();
+    const id = pedido.id;
+    this.ejecutarAccion(id, () => this.pedidoSvc.eliminar(id), () => {
+      this.pedidos = this.pedidos.filter(p => p.id !== id);
+    });
+  }
+
+  private ejecutarAccion<T>(id: number, peticion: () => Observable<T>, aplicar: (dato: T) => void) {
+    if (this.procesando()[id]) return;
+    this.errorMsg.set('');
+    this.procesando.update(estado => ({ ...estado, [id]: true }));
+    defer(peticion).pipe(
+      timeout(30000), take(1), takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.procesando.update(estado => ({ ...estado, [id]: false }))),
+    ).subscribe({
+      next: aplicar,
+      error: error => {
+        const motivo = error instanceof TimeoutError ? 'tiempo de espera agotado' : (error.status || 'Red');
+        this.errorMsg.set(`No se pudo confirmar el cambio del pedido #${id} (${motivo}). Recarga el historial para comprobar su estado antes de repetir la acción.`);
       },
-      error: () => { this.procesando[pedido.id!] = false; }
     });
   }
 
