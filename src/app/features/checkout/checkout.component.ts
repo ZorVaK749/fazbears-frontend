@@ -1,4 +1,6 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { defer, finalize, take, timeout, TimeoutError } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -23,7 +25,7 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
       </header>
 
       <!-- PANTALLA DE ÉXITO -->
-      @if (pagoExitoso) {
+      @if (pagoExitoso()) {
         <div class="success-card">
           <div class="success-icon pixel blink">✓</div>
           <h2 class="pixel text-neon-green">¡PAGO APROBADO CON ÉXITO!</h2>
@@ -229,9 +231,9 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
                 </span>
               </div>
 
-              @if (errorMsg) {
+              @if (errorMsg()) {
                 <div class="error-box pixel">
-                  ⚠ {{ errorMsg }}
+                  ⚠ {{ errorMsg() }}
                 </div>
               }
 
@@ -239,9 +241,9 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
                 id="btn-confirmar-pago"
                 type="button"
                 class="btn-neon btn-pagar pixel"
-                [disabled]="procesando"
+                [disabled]="procesando()"
                 (click)="procesarPago()">
-                @if (procesando) {
+                @if (procesando()) {
                   <span class="blink">⚙ PROCESANDO PAGO...</span>
                 } @else {
                   <span>💳 PAGAR \${{ carritoSvc.carrito().total.toFixed(2) }}</span>
@@ -602,6 +604,7 @@ export class CheckoutComponent implements OnInit {
   private ordenSvc = inject(OrdenService);
   private msalSvc = inject(MsalService);
   private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
 
   metodoSeleccionado: MetodoPago = 'TARJETA';
   numeroTarjeta = '';
@@ -610,12 +613,12 @@ export class CheckoutComponent implements OnInit {
   cvv = '';
   ubicacion = 'Mesa Show Stage #1';
 
-  procesando = false;
-  pagoExitoso = false;
+  procesando = signal(false);
+  pagoExitoso = signal(false);
   pedidoIdGenerado: number | null = null;
   montoPagado = 0;
   emailUsuario = '';
-  errorMsg = '';
+  errorMsg = signal('');
 
   ngOnInit() {
     const cuenta = this.msalSvc.instance.getAllAccounts()[0];
@@ -635,30 +638,30 @@ export class CheckoutComponent implements OnInit {
   }
 
   procesarPago() {
-    if (this.procesando || this.pagoExitoso) return;
+    if (this.procesando() || this.pagoExitoso()) return;
     if (this.carritoSvc.carrito().items.length === 0) {
-      this.errorMsg = 'El carrito está vacío';
+      this.errorMsg.set('El carrito está vacío');
       return;
     }
 
     if (this.metodoSeleccionado === 'TARJETA') {
       const numSinEspacio = this.numeroTarjeta.replace(/\s/g, '');
       if (numSinEspacio.length < 15) {
-        this.errorMsg = 'Por favor ingresa un número de tarjeta válido';
+        this.errorMsg.set('Por favor ingresa un número de tarjeta válido');
         return;
       }
       if (!this.expiracion || this.expiracion.length < 4) {
-        this.errorMsg = 'Por favor ingresa la fecha de vencimiento (MM/AA)';
+        this.errorMsg.set('Por favor ingresa la fecha de vencimiento (MM/AA)');
         return;
       }
       if (!this.cvv || this.cvv.length < 3) {
-        this.errorMsg = 'Por favor ingresa el código de seguridad CVV';
+        this.errorMsg.set('Por favor ingresa el código de seguridad CVV');
         return;
       }
     }
 
-    this.procesando = true;
-    this.errorMsg = '';
+    this.procesando.set(true);
+    this.errorMsg.set('');
     const cuenta = this.msalSvc.instance.getAllAccounts()[0];
 
     const payload = {
@@ -674,20 +677,26 @@ export class CheckoutComponent implements OnInit {
 
     this.montoPagado = this.carritoSvc.carrito().total;
 
-    this.ordenSvc.confirmar(payload).subscribe({
+    defer(() => this.ordenSvc.confirmar(payload)).pipe(
+      timeout(30000),
+      take(1),
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.procesando.set(false)),
+    ).subscribe({
       next: (res) => {
-        this.procesando = false;
-        this.pagoExitoso = true;
+        this.pagoExitoso.set(true);
         this.pedidoIdGenerado = res.pedidoId;
         this.montoPagado = res.total;
         this.carritoSvc.vaciar();
       },
       error: (err) => {
-        this.procesando = false;
-        if (err.status === 503) {
-          this.errorMsg = 'Servicio de órdenes no disponible (503). Asegúrate de que el microservicio ms-orden esté encendido en su EC2.';
+        const comprobar = ' Revisa MIS PEDIDOS antes de volver a confirmar para evitar duplicados.';
+        if (err instanceof TimeoutError) {
+          this.errorMsg.set('La confirmación tardó demasiado; no se pudo comprobar el resultado.' + comprobar);
+        } else if (err.status === 503) {
+          this.errorMsg.set('Servicio de órdenes no disponible (503).' + comprobar);
         } else {
-          this.errorMsg = `Error al procesar el pago y la orden (${err.status || 'Red'}). Intenta nuevamente.`;
+          this.errorMsg.set(`No se pudo confirmar la orden (${err.status || 'Red'}).` + comprobar);
         }
       }
     });
