@@ -16,7 +16,7 @@ export interface CarritoState {
 
 @Injectable({ providedIn: 'root' })
 export class CarritoService {
-  private base = 'https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/carrito';
+  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/carrito';
 
   /** Estado del carrito en memoria (reactivo con signals) */
   carrito = signal<CarritoState>({ items: [], total: 0 });
