@@ -1,0 +1,37 @@
+
+name: Fazbear Frontend - Docker CI
+
+on:
+  push:
+    branches:
+      - ev3/ci-frontend
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v4
+
+      - name: Iniciar sesion en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir y publicar frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/zorvak749/fazbears-frontend:ev3-test
+          labels: |
+            org.opencontainers.image.source=https://github.com/ZorVaK749/fazbears-frontend
