@@ -23,7 +23,7 @@ export interface Pedido {
 
 @Injectable({ providedIn: 'root' })
 export class PedidoService {
-  private base = 'https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/pedidos';
+  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/pedidos';
 
   constructor(private http: HttpClient) {}
 

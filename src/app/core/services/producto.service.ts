@@ -13,7 +13,7 @@ export interface Producto {
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
-  private base = 'https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/productos';
+  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/productos';
 
   constructor(private http: HttpClient) {}
 

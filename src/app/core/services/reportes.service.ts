@@ -16,7 +16,7 @@ export interface IngresosReporte {
 
 @Injectable({ providedIn: 'root' })
 export class ReportesService {
-  private base = 'https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/reportes';
+  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/reportes';
 
   constructor(private http: HttpClient) {}
 
