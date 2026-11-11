@@ -63,12 +63,19 @@ export function MSALInstanceFactory(): PublicClientApplication {
 export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>();
 
+  const API_BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com';
+
   // Rutas protegidas: el interceptor adjuntará el Bearer JWT en estas URLs
-  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/productos', [API_SCOPE]);
-  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/carrito', [API_SCOPE]);
-  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/pedidos', [API_SCOPE]);
-  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/orden', [API_SCOPE]);
-  protectedResourceMap.set('https://1nqf3okm71.execute-api.us-east-1.amazonaws.com/reportes', [API_SCOPE]);
+  for (const ruta of [
+    'productos',
+    'carrito',
+    'pedidos',
+    'orden',
+    'notificaciones',
+    'reportes',
+  ]) {
+    protectedResourceMap.set(`${API_BASE}/api/${ruta}`, [API_SCOPE]);
+  }
 
   return {
     interactionType: InteractionType.Redirect,
