@@ -11,6 +11,7 @@ import { CarritoService } from '../../core/services/carrito.service';
 import { OrdenResponse, OrdenService } from '../../core/services/orden.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CheckoutComponent } from './checkout.component';
+import { AZURE_TENANT_ID } from '../../core/auth/auth.config';
 
 @Component({ selector: 'app-navbar', standalone: true, template: '' })
 class NavbarStub {}
@@ -50,8 +51,13 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
     fixture.componentInstance.metodoSeleccionado = 'EFECTIVO'; fixture.detectChanges();
     return fixture;
   }
+  async function identidad(uid = 'a') {
+    http.expectOne(`${BASE}/me`).flush({ usuarioId: uid, tenantId: AZURE_TENANT_ID });
+    await turno();
+  }
   async function cargar() {
     const carga = carrito.inicializar(); await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto()); await carga;
   }
 
@@ -62,6 +68,7 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
     await fixture.componentInstance.procesarPago(); // duplicate click during the barrier
     await turno();
     expect(confirmar).not.toHaveBeenCalled();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto());
     await turno();
     expect(confirmar).not.toHaveBeenCalled();
@@ -83,6 +90,7 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
     const fixture = create();
     const espera = fixture.componentInstance.procesarPago();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush({}, { status: 403, statusText: 'Forbidden' });
     await espera; await fixture.whenStable();
     expect(confirmar).not.toHaveBeenCalled();
@@ -107,10 +115,11 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
     const fixture = create();
     const espera = fixture.componentInstance.procesarPago();
     await turno();
+    await identidad();
     const anterior = http.expectOne(`${BASE}/a`);
     activa = account('b'); const carga = carrito.inicializar();
     expect(anterior.cancelled).toBe(true);
-    await turno(); http.expectOne(`${BASE}/b`).flush(dto('b', 3));
+    await turno(); await identidad('b'); http.expectOne(`${BASE}/b`).flush(dto('b', 3));
     await Promise.all([espera, carga]);
     expect(confirmar).not.toHaveBeenCalled();
     expect(carrito.cantidadItems).toBe(3);
@@ -121,7 +130,7 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
     await fixture.componentInstance.procesarPago();
     expect(confirmar).toHaveBeenCalledTimes(1);
     activa = account('b'); const carga = carrito.inicializar();
-    await turno(); http.expectOne(`${BASE}/b`).flush(dto('b', 3)); await carga;
+    await turno(); await identidad('b'); http.expectOne(`${BASE}/b`).flush(dto('b', 3)); await carga;
     response.next({ pedidoId: 42, mensaje: 'OK', estado: 'PENDIENTE', total: 12.99 });
     await turno();
     http.expectNone(() => true);
@@ -144,9 +153,36 @@ describe('Checkout: only cart synchronization boundary, no real orders', () => {
   it('leaving the component while waiting does not send a late order', async () => {
     const fixture = create();
     const espera = fixture.componentInstance.procesarPago();
-    await turno(); const carga = http.expectOne(`${BASE}/a`);
+    await turno(); await identidad(); const carga = http.expectOne(`${BASE}/a`);
     fixture.destroy(); carga.flush(dto());
     await espera;
     expect(confirmar).not.toHaveBeenCalled();
+  });
+
+  it('waits for /me and propagates the backend owner to Orden even when localAccountId differs', async () => {
+    const fixture = create();
+    const espera = fixture.componentInstance.procesarPago();
+    await turno();
+    expect(confirmar).not.toHaveBeenCalled();
+    const oid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    http.expectOne(`${BASE}/me`).flush({ usuarioId: oid, tenantId: AZURE_TENANT_ID });
+    await turno();
+    expect(confirmar).not.toHaveBeenCalled();
+    http.expectOne(`${BASE}/${oid}`).flush(dto(oid, 2));
+    await espera;
+    expect(confirmar).toHaveBeenCalledTimes(1);
+    expect(confirmar.mock.calls[0][0].usuarioId).toBe(oid);
+    expect(confirmar.mock.calls[0][0].usuarioId).not.toBe(activa.localAccountId);
+    expect(confirmar.mock.calls[0][0]).not.toHaveProperty('tenantId');
+  });
+
+  it('identity endpoint failure never sends an order or falls back to localAccountId', async () => {
+    const fixture = create();
+    const espera = fixture.componentInstance.procesarPago();
+    await turno(); http.expectOne(`${BASE}/me`).flush({}, { status: 404, statusText: 'Not deployed' });
+    await espera;
+    expect(confirmar).not.toHaveBeenCalled();
+    http.expectNone(() => true);
+    expect(fixture.componentInstance.procesando).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import { MsalService } from '@azure/msal-angular';
 import { afterEach, vi } from 'vitest';
 import { CarritoService } from './carrito.service';
 import { Producto } from './producto.service';
+import { AZURE_TENANT_ID } from '../auth/auth.config';
 
 const BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/carrito';
 const producto: Producto = { id: 7, nombre: 'Pizza Freddy', descripcion: 'Pizza', precio: 12.99, categoria: 'PIZZA' };
@@ -31,9 +32,15 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   });
   afterEach(() => { http.verify(); vi.useRealTimers(); });
 
+  async function identidad(uid = 'a') {
+    http.expectOne(`${BASE}/me`).flush({ usuarioId: uid, tenantId: AZURE_TENANT_ID });
+    await turno();
+  }
+
   async function cargar(cantidad = 1, uid = 'a') {
     const carga = servicio.inicializar();
     await turno();
+    await identidad(uid);
     http.expectOne(`${BASE}/${uid}`).flush(dto(uid, cantidad));
     await carga;
   }
@@ -52,6 +59,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
     expect(nueva.cantidadItems).toBe(0);
     const carga = nueva.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto('a', 2));
     await carga;
     expect(nueva.cantidadItems).toBe(2);
@@ -61,6 +69,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('deduplica inicialización simultánea de App y navbar', async () => {
     const uno = servicio.inicializar(), dos = servicio.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto());
     await Promise.all([uno, dos]);
     await servicio.inicializar();
@@ -99,6 +108,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
     servicio.agregarProducto(producto);
     expect(servicio.cantidadItems).toBe(0);
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto('a', 1));
     await turno();
     const post = http.expectOne(`${BASE}/a/items`);
@@ -250,6 +260,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('fallo en carga inicial cancela escrituras que dependían de esa carga', async () => {
     servicio.agregarProducto(producto);
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush({}, { status: 403, statusText: 'Forbidden' });
     expect(await servicio.sincronizado()).toBe(false);
     http.expectNone(() => true);
@@ -272,12 +283,14 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('cambio de usuario cancela lectura anterior y no mezcla respuestas', async () => {
     const anterior = servicio.inicializar();
     await turno();
+    await identidad();
     const getA = http.expectOne(`${BASE}/a`);
     activa = cuenta('b'); cuentas = [activa];
     const nueva = servicio.inicializar();
     expect(getA.cancelled).toBe(true);
     expect(servicio.cantidadItems).toBe(0);
     await turno();
+    await identidad('b');
     http.expectOne(`${BASE}/b`).flush(dto('b', 3));
     await Promise.all([anterior, nueva]);
     expect(servicio.cantidadItems).toBe(3);
@@ -293,6 +306,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
     const cargaB = servicio.inicializar();
     expect(postA.cancelled).toBe(true);
     await turno();
+    await identidad('b');
     http.expectOne(`${BASE}/b`).flush(dto('b', 6));
     await cargaB;
     expect(await servicio.sincronizado()).toBe(true);
@@ -315,6 +329,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
     const cambio = servicio.inicializar();
     expect(servicio.snapshotVigente(snapshot)).toBe(false);
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto('a', 4));
     await cambio;
     servicio.limpiarTrasCompra(snapshot);
@@ -325,6 +340,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('rechaza respuesta de otra cuenta', async () => {
     const carga = servicio.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto('otra-cuenta', 5));
     await carga;
     expect(await servicio.sincronizado()).toBe(false);
@@ -334,6 +350,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('rechaza ítems sin id confirmado en vez de fabricar un DELETE', async () => {
     const carga = servicio.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush({ usuarioId: 'a', items: [{ productoId: 7, cantidad: 1, precioUnitario: 1 }] });
     await carga;
     expect(await servicio.sincronizado()).toBe(false);
@@ -392,6 +409,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('normaliza un precio decimal textual sin depender del total recibido', async () => {
     const carga = servicio.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush({ usuarioId: 'a', total: 999, items: [
       { ...dto().items[0], precioUnitario: '12.99' },
     ] });
@@ -402,6 +420,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('no acepta una respuesta que duplique productoId', async () => {
     const carga = servicio.inicializar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush({ usuarioId: 'a', items: [dto().items[0], dto().items[0]] });
     await carga;
     expect(await servicio.sincronizado()).toBe(false);
@@ -419,6 +438,7 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
   it('una recarga concurrente se une a la lectura existente', async () => {
     const una = servicio.recargar(), dos = servicio.recargar();
     await turno();
+    await identidad();
     http.expectOne(`${BASE}/a`).flush(dto());
     await Promise.all([una, dos]);
     expect(await servicio.sincronizado()).toBe(true);

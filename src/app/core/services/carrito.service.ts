@@ -4,6 +4,7 @@ import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
 import { Observable, Subject, firstValueFrom, takeUntil, timeout } from 'rxjs';
 import { Producto } from './producto.service';
+import { AZURE_TENANT_ID } from '../auth/auth.config';
 
 export interface ItemCarrito {
   id: number;
@@ -15,8 +16,11 @@ export interface ItemCarrito {
 
 export interface CarritoState { items: ItemCarrito[]; total: number; }
 
+export interface IdentidadCarrito { usuarioId: string; tenantId: string; }
+
 export interface CarritoParaConfirmar extends CarritoState {
   usuarioId: string;
+  tenantId: string;
   emailUsuario: string;
   sesion: number;
   revision: number;
@@ -25,7 +29,7 @@ export interface CarritoParaConfirmar extends CarritoState {
 interface SesionCarrito {
   id: number;
   clave: string;
-  usuarioId: string;
+  identidad: IdentidadCarrito | null;
   cancelar: Subject<void>;
   cola: Promise<void>;
   pendientes: number;
@@ -158,17 +162,18 @@ export class CarritoService {
     await this.inicializar();
     let cola: Promise<void>;
     do { cola = sesion.cola; await cola; } while (this.esActual(sesion) && cola !== sesion.cola);
-    return this.esActual(sesion) && sesion.cargado && !sesion.requiereRevision;
+    return this.esActual(sesion) && !!sesion.identidad && sesion.cargado && !sesion.requiereRevision;
   }
 
   async prepararCheckout(): Promise<CarritoParaConfirmar> {
     const sesion = this.contexto();
-    if (!sesion || !await this.sincronizado() || !this.esActual(sesion)) {
+    if (!sesion || !await this.sincronizado() || !this.esActual(sesion) || !sesion.identidad) {
       throw new Error('No se pudo sincronizar el carrito. Revísalo y actualízalo antes de confirmar.');
     }
     if (!this.carrito().items.length) throw new Error('El carrito está vacío.');
     return { ...this.carrito(), items: this.carrito().items.map(item => ({ ...item })),
-      usuarioId: sesion.usuarioId, emailUsuario: this.cuentaActual()?.username ?? '',
+      usuarioId: sesion.identidad.usuarioId, tenantId: sesion.identidad.tenantId,
+      emailUsuario: this.cuentaActual()?.username ?? '',
       sesion: sesion.id, revision: sesion.revision };
   }
 
@@ -197,7 +202,7 @@ export class CarritoService {
     }
     if (this.sesion?.clave !== clave) {
       this.cerrarSesion();
-      this.sesion = { id: ++this.siguienteSesion, clave, usuarioId: cuenta.localAccountId,
+      this.sesion = { id: ++this.siguienteSesion, clave, identidad: null,
         cancelar: new Subject<void>(), cola: Promise.resolve(), pendientes: 0,
         secuencia: 0, canceladasHasta: 0, cargaSolicitada: false, cargado: false,
         requiereRevision: false, revision: 0 };
@@ -253,21 +258,41 @@ export class CarritoService {
   }
 
   private async cargar(sesion: SesionCarrito): Promise<void> {
+    if (!this.esActual(sesion)) return;
+    if (!sesion.identidad) {
+      const respuesta = await this.pedir(sesion, this.http.get<unknown>(`${this.base}/me`));
+      if (!this.esActual(sesion)) return;
+      const identidad = respuesta as Partial<IdentidadCarrito> | null;
+      // Comprobar forma/coherencia, no inferir oid desde localAccountId o claims del navegador.
+      // La autorización criptográfica y la validez de oid/tid siguen siendo del backend.
+      if (!identidad || typeof identidad.usuarioId !== 'string'
+          || !/^[a-zA-Z0-9-]{1,100}$/.test(identidad.usuarioId) || identidad.usuarioId === 'me'
+          || typeof identidad.tenantId !== 'string' || !identidad.tenantId
+          || identidad.tenantId !== AZURE_TENANT_ID) {
+        throw new Error('Identidad de carrito incompatible');
+      }
+      sesion.identidad = { usuarioId: identidad.usuarioId, tenantId: identidad.tenantId };
+    }
+    if (!this.esActual(sesion)) return;
     this.aplicar(await this.pedir(sesion, this.http.get<unknown>(this.url(sesion))), sesion);
     if (this.esActual(sesion)) sesion.cargado = true;
   }
 
   private pedir<T>(sesion: SesionCarrito, peticion: Observable<T>): Promise<T> {
+    if (!this.esActual(sesion)) return Promise.reject(new Error('Sesión de carrito obsoleta'));
     // Cancelar la suscripción no puede deshacer una escritura ya recibida por el servidor.
     return firstValueFrom(peticion.pipe(timeout(15000), takeUntil(sesion.cancelar)));
   }
 
-  private url(sesion: SesionCarrito): string { return `${this.base}/${encodeURIComponent(sesion.usuarioId)}`; }
+  private url(sesion: SesionCarrito): string {
+    if (!sesion.identidad) throw new Error('Identidad de carrito no resuelta');
+    return `${this.base}/${encodeURIComponent(sesion.identidad.usuarioId)}`;
+  }
 
   private aplicar(respuesta: unknown, sesion: SesionCarrito): void {
     if (!this.esActual(sesion)) return;
     const dto = respuesta as { usuarioId?: unknown; items?: unknown } | null;
-    if (!dto || dto.usuarioId !== sesion.usuarioId || !Array.isArray(dto.items)) {
+    if (!dto || !sesion.identidad || dto.usuarioId !== sesion.identidad.usuarioId || !Array.isArray(dto.items)) {
       throw new Error('Respuesta de carrito incompatible');
     }
     const productos = new Set<number>();
