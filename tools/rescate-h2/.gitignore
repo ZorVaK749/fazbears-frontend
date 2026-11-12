@@ -1,0 +1,7 @@
+artifacts/
+private/
+*.mv.db
+*.trace.db
+*.sql
+*.json
+!package.json
