@@ -32,7 +32,7 @@ export class PedidoService {
   }
 
   getByUsuario(usuarioId: string): Observable<Pedido[]> {
-    return this.http.get<Pedido[]>(`${this.base}/usuario/${usuarioId}`);
+    return this.http.get<Pedido[]>(`${this.base}/usuario/${encodeURIComponent(usuarioId)}`);
   }
 
   crear(pedido: Pedido): Observable<Pedido> {

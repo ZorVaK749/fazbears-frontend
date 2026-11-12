@@ -1,13 +1,10 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
-import { PedidoService, Pedido, EstadoPedido } from '../../core/services/pedido.service';
+import { Component, OnInit, inject } from '@angular/core';
+import { Pedido } from '../../core/services/pedido.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CarritoComponent } from '../cart/carrito.component';
 import { RouterLink } from '@angular/router';
 import { SlicePipe } from '@angular/common';
-import { MsalService } from '@azure/msal-angular';
-
-// Emails que tienen acceso de administrador
-const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
+import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 
 @Component({
   selector: 'app-orders',
@@ -26,6 +23,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
             </p>
           </div>
           <a routerLink="/catalogo" class="btn-neon btn-neon-cyan btn-volver">← VOLVER AL MENÚ</a>
+          <button class="btn-neon" [disabled]="cargando" (click)="actualizar()">ACTUALIZAR</button>
         </div>
 
         @if (esAdmin) {
@@ -36,8 +34,11 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
       @if (cargando) {
         <p class="pixel text-neon-cyan blink" style="text-align:center;padding:4rem">[ CARGANDO PEDIDOS... ]</p>
       }
+      @if (error) {
+        <div role="alert">{{ error }} <button (click)="actualizar()">ACTUALIZAR</button></div>
+      }
 
-      @if (!cargando && pedidosFiltrados.length === 0) {
+      @if (!cargando && !error && pedidosFiltrados.length === 0) {
         <div style="text-align:center;padding:4rem">
           <p class="pixel text-neon-purple">[ SIN PEDIDOS AÚN ]</p>
           <p style="color:var(--fnaf-muted)">¡Realiza tu primer pedido desde el menú!</p>
@@ -91,36 +92,7 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
                       </button>
                     }
 
-                    <!-- Cambio de estado: solo admin -->
-                    @if (esAdmin) {
-                      @if (pedido.estado === 'PENDIENTE') {
-                        <button
-                          id="btn-preparar-{{ pedido.id }}"
-                          class="btn-accion btn-preparar pixel"
-                          [disabled]="procesando[pedido.id!]"
-                          (click)="cambiarEstado(pedido, 'PREPARANDO')">
-                          🍕 PREPARAR
-                        </button>
-                      }
-                      @if (pedido.estado === 'PREPARANDO') {
-                        <button
-                          id="btn-completar-{{ pedido.id }}"
-                          class="btn-accion btn-completar pixel"
-                          [disabled]="procesando[pedido.id!]"
-                          (click)="cambiarEstado(pedido, 'COMPLETADO')">
-                          ✓ COMPLETAR
-                        </button>
-                      }
-                      @if (pedido.estado === 'CANCELADO' || pedido.estado === 'COMPLETADO') {
-                        <button
-                          id="btn-eliminar-{{ pedido.id }}"
-                          class="btn-accion btn-eliminar pixel"
-                          [disabled]="procesando[pedido.id!]"
-                          (click)="eliminarPedido(pedido)">
-                          🗑 ELIMINAR
-                        </button>
-                      }
-                    }
+                    <!-- Administración deshabilitada hasta validar roles en backend/Azure. -->
 
                     @if (procesando[pedido.id!]) {
                       <span class="pixel blink proc-txt">...</span>
@@ -204,69 +176,25 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
   `]
 })
 export class OrdersComponent implements OnInit {
-  private pedidoSvc = inject(PedidoService);
-  private msalSvc   = inject(MsalService);
-  private cdr       = inject(ChangeDetectorRef);
-
-  pedidos: Pedido[] = [];
-  cargando = true;
-  procesando: Record<number, boolean> = {};
-  esAdmin = false;
-  usuarioId = '';
+  private misPedidosSvc = inject(MisPedidosService);
+  readonly esAdmin = false;
+  get cargando(): boolean { return this.misPedidosSvc.cargando(); }
+  get procesando(): Record<number, boolean> { return this.misPedidosSvc.procesando(); }
+  get error(): string { return this.misPedidosSvc.error(); }
 
   get pedidosFiltrados(): Pedido[] {
-    if (this.esAdmin) return this.pedidos;
-    return this.pedidos.filter(p => p.usuarioId === this.usuarioId);
+    return this.misPedidosSvc.pedidos();
   }
 
   ngOnInit() {
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
-    this.usuarioId = cuenta?.localAccountId ?? '';
-    this.esAdmin = ADMIN_EMAILS.includes(cuenta?.username ?? '');
-
-    this.pedidoSvc.getAll().subscribe({
-      next: (data) => { this.pedidos = data; this.cargando = false; this.cdr.detectChanges(); },
-      error: () => { this.cargando = false; this.cdr.detectChanges(); }
-    });
+    this.misPedidosSvc.inicializar();
   }
 
   cancelarPedido(pedido: Pedido) {
-    if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.cancelar(pedido.id).subscribe({
-      next: (actualizado) => {
-        pedido.estado = actualizado.estado;
-        this.procesando[pedido.id!] = false;
-        this.cdr.detectChanges();
-      },
-      error: () => { this.procesando[pedido.id!] = false; }
-    });
+    this.misPedidosSvc.cancelar(pedido);
   }
 
-  cambiarEstado(pedido: Pedido, nuevoEstado: EstadoPedido) {
-    if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.actualizarEstado(pedido.id, nuevoEstado).subscribe({
-      next: (actualizado) => {
-        pedido.estado = actualizado.estado;
-        this.procesando[pedido.id!] = false;
-        this.cdr.detectChanges();
-      },
-      error: () => { this.procesando[pedido.id!] = false; }
-    });
-  }
-
-  eliminarPedido(pedido: Pedido) {
-    if (!pedido.id) return;
-    this.procesando[pedido.id] = true;
-    this.pedidoSvc.eliminar(pedido.id).subscribe({
-      next: () => {
-        this.pedidos = this.pedidos.filter(p => p.id !== pedido.id);
-        this.cdr.detectChanges();
-      },
-      error: () => { this.procesando[pedido.id!] = false; }
-    });
-  }
+  actualizar() { this.misPedidosSvc.actualizar(); }
 
   formatFecha(fecha?: string): string {
     if (!fecha) return '—';

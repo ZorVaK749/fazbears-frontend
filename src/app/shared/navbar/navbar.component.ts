@@ -4,7 +4,6 @@ import { CarritoService } from '../../core/services/carrito.service';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
 
-const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 
 @Component({
   selector: 'app-navbar',
@@ -143,7 +142,7 @@ export class NavbarComponent implements OnInit {
   private msalSvc = inject(MsalService);
 
   get usuario(): AccountInfo | null { return this.carritoSvc.cuentaActual(); }
-  get esAdmin(): boolean { return ADMIN_EMAILS.includes(this.usuario?.username ?? ''); }
+  readonly esAdmin = false; // Administración cerrada hasta verificar/configurar app roles Azure.
 
   get inicial(): string {
     return (this.usuario?.name ?? this.usuario?.username ?? '?')[0].toUpperCase();

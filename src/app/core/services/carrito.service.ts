@@ -17,6 +17,7 @@ export interface ItemCarrito {
 export interface CarritoState { items: ItemCarrito[]; total: number; }
 
 export interface IdentidadCarrito { usuarioId: string; tenantId: string; }
+export interface IdentidadSesion extends IdentidadCarrito { sesion: number; }
 
 export interface CarritoParaConfirmar extends CarritoState {
   usuarioId: string;
@@ -55,6 +56,15 @@ export class CarritoService {
   readonly errorSincronizacion = signal('');
   private sesion: SesionCarrito | null = null;
   private siguienteSesion = 0;
+  private readonly identidadEstado = signal<Readonly<IdentidadSesion> | null>(null);
+  readonly identidadVerificada = this.identidadEstado.asReadonly();
+
+  esIdentidadActual(identidad: Readonly<IdentidadSesion>): boolean {
+    const sesion = this.sesion;
+    return !!sesion && this.esActual(sesion) && identidad.sesion === sesion.id
+      && identidad.usuarioId === sesion.identidad?.usuarioId
+      && identidad.tenantId === sesion.identidad?.tenantId;
+  }
 
   toggleCarrito() { this.abierto.update(valor => !valor); }
   cerrarCarrito() { this.abierto.set(false); }
@@ -93,6 +103,7 @@ export class CarritoService {
   cerrarSesion(): void {
     const anterior = this.sesion;
     this.sesion = null;
+    this.identidadEstado.set(null);
     anterior?.cancelar.next();
     anterior?.cancelar.complete();
     this.estado.set({ items: [], total: 0 });
@@ -272,6 +283,7 @@ export class CarritoService {
         throw new Error('Identidad de carrito incompatible');
       }
       sesion.identidad = { usuarioId: identidad.usuarioId, tenantId: identidad.tenantId };
+      this.identidadEstado.set(Object.freeze({ ...sesion.identidad, sesion: sesion.id }));
     }
     if (!this.esActual(sesion)) return;
     this.aplicar(await this.pedir(sesion, this.http.get<unknown>(this.url(sesion))), sesion);

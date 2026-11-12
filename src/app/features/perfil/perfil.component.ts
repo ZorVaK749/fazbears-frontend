@@ -3,9 +3,9 @@ import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
-import { PedidoService, Pedido } from '../../core/services/pedido.service';
-
-const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
+import { Pedido } from '../../core/services/pedido.service';
+import { CarritoService } from '../../core/services/carrito.service';
+import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 
 @Component({
   selector: 'app-perfil',
@@ -17,7 +17,12 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
     <main class="perfil-main">
       <header class="perfil-header">
         <a routerLink="/catalogo" class="btn-neon btn-neon-cyan btn-volver">← VOLVER AL MENÚ</a>
+        <button class="btn-neon" [disabled]="cargando" (click)="actualizar()">ACTUALIZAR PEDIDOS</button>
       </header>
+      @if (cargando) { <p role="status">Cargando tus pedidos…</p> }
+      @if (error) {
+        <div role="alert">{{ error }} <button (click)="actualizar()">ACTUALIZAR</button></div>
+      }
 
       @if (usuario) {
         <div class="perfil-hero">
@@ -70,8 +75,8 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
               <span class="cuenta-val">{{ usuario.username }}</span>
             </div>
             <div class="cuenta-item">
-              <span class="cuenta-key pixel">ID de cuenta</span>
-              <span class="cuenta-val mono">{{ usuario.localAccountId }}</span>
+              <span class="cuenta-key pixel">ID de propietario verificado</span>
+              <span class="cuenta-val mono">{{ usuarioId || 'Pendiente de verificar' }}</span>
             </div>
             <div class="cuenta-item">
               <span class="cuenta-key pixel">Rol</span>
@@ -194,11 +199,15 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 })
 export class PerfilComponent implements OnInit {
   private msalSvc   = inject(MsalService);
-  private pedidoSvc = inject(PedidoService);
+  private carrito = inject(CarritoService);
+  private misPedidosSvc = inject(MisPedidosService);
 
-  usuario: AccountInfo | null = null;
-  esAdmin = false;
-  misPedidos: Pedido[] = [];
+  get usuario(): AccountInfo | null { return this.carrito.cuentaActual(); }
+  readonly esAdmin = false; // Sin rol Azure verificado: no privilegios por email.
+  get misPedidos(): Pedido[] { return this.misPedidosSvc.pedidos(); }
+  get cargando(): boolean { return this.misPedidosSvc.cargando(); }
+  get error(): string { return this.misPedidosSvc.error(); }
+  get usuarioId(): string { return this.carrito.identidadVerificada()?.usuarioId ?? ''; }
 
   get inicial(): string {
     return (this.usuario?.name ?? this.usuario?.username ?? '?')[0].toUpperCase();
@@ -214,18 +223,13 @@ export class PerfilComponent implements OnInit {
   }
 
   ngOnInit() {
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
-    this.usuario = cuenta ?? null;
-    this.esAdmin = ADMIN_EMAILS.includes(cuenta?.username ?? '');
-
-    if (cuenta) {
-      this.pedidoSvc.getByUsuario(cuenta.localAccountId).subscribe({
-        next: (p) => { this.misPedidos = p; }
-      });
-    }
+    this.misPedidosSvc.inicializar();
   }
 
+  actualizar() { this.misPedidosSvc.actualizar(); }
+
   logout() {
+    this.carrito.cerrarSesion();
     this.msalSvc.logoutRedirect({
       postLogoutRedirectUri: window.location.origin + '/login',
     });

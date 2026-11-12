@@ -2,10 +2,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { ReportesService, ResumenReporte } from '../../core/services/reportes.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
-import { MsalService } from '@azure/msal-angular';
 import { Router } from '@angular/router';
 
-const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 
 @Component({
   selector: 'app-reportes',
@@ -174,20 +172,22 @@ const ADMIN_EMAILS = ['vic.placencia@duocuc.cl', 'Vic.placencia@duocuc.cl'];
 })
 export class ReportesComponent implements OnInit {
   private reportesSvc = inject(ReportesService);
-  private msalSvc     = inject(MsalService);
   private router      = inject(Router);
+  private readonly administracionHabilitada = false; // No permisos por email ni roles inventados.
 
   resumen: ResumenReporte | null = null;
   cargando = true;
 
   ngOnInit() {
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
-    const esAdmin = ADMIN_EMAILS.includes(cuenta?.username ?? '');
-    if (!esAdmin) { this.router.navigate(['/catalogo']); return; }
+    if (!this.administracionHabilitada) {
+      this.cargando = false;
+      void this.router.navigate(['/catalogo']); return;
+    }
     this.cargar();
   }
 
   cargar() {
+    if (!this.administracionHabilitada) return;
     this.cargando = true;
     this.reportesSvc.getResumen().subscribe({
       next: (r) => { this.resumen = r; this.cargando = false; },
