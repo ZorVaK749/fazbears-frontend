@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CarritoService } from '../../core/services/carrito.service';
 
@@ -27,7 +27,16 @@ import { CarritoService } from '../../core/services/carrito.service';
 
       <!-- Items -->
       <div class="carrito-items">
-        @if (carritoSvc.carrito().items.length === 0) {
+        @if (carritoSvc.sincronizando()) {
+          <p role="status" class="carrito-hint">Sincronizando carrito…</p>
+        }
+        @if (carritoSvc.errorSincronizacion()) {
+          <div role="alert" class="pedido-error">
+            <p>{{ carritoSvc.errorSincronizacion() }}</p>
+            <button class="btn-neon" [disabled]="carritoSvc.sincronizando()" (click)="carritoSvc.recargar()">ACTUALIZAR</button>
+          </div>
+        }
+        @if (carritoSvc.carrito().items.length === 0 && !carritoSvc.sincronizando() && !carritoSvc.errorSincronizacion()) {
           <div class="carrito-vacio">
             <p class="pixel text-neon-purple blink">[ CARRITO VACÍO ]</p>
             <p class="carrito-hint">Agrega productos del menú para comenzar</p>
@@ -43,10 +52,10 @@ import { CarritoService } from '../../core/services/carrito.service';
               </p>
             </div>
             <div class="item-controles">
-              <button class="btn-ctrl" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad - 1)">−</button>
+              <button class="btn-ctrl" [disabled]="carritoSvc.sincronizando()" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad - 1)">−</button>
               <span class="pixel item-cant">{{ item.cantidad }}</span>
-              <button class="btn-ctrl" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad + 1)">+</button>
-              <button class="btn-quitar" title="Quitar del carrito" (click)="carritoSvc.quitarItem(item.productoId)">🗑</button>
+              <button class="btn-ctrl" [disabled]="carritoSvc.sincronizando()" (click)="carritoSvc.cambiarCantidad(item.productoId, item.cantidad + 1)">+</button>
+              <button class="btn-quitar" [disabled]="carritoSvc.sincronizando()" title="Quitar del carrito" (click)="carritoSvc.quitarItem(item.productoId)">🗑</button>
             </div>
           </div>
         }
@@ -62,11 +71,11 @@ import { CarritoService } from '../../core/services/carrito.service';
             </span>
           </div>
 
-          <button class="btn-neon btn-confirmar pixel" (click)="irAlPago()">
+          <button class="btn-neon btn-confirmar pixel" [disabled]="abriendoCheckout()" (click)="irAlPago()">
             PROCEDER AL PAGO 💳
           </button>
 
-          <button class="btn-vaciar" (click)="carritoSvc.vaciar()">VACIAR CARRITO</button>
+          <button class="btn-vaciar" [disabled]="carritoSvc.sincronizando()" (click)="carritoSvc.vaciar()">VACIAR CARRITO</button>
         </div>
       }
     </aside>
@@ -159,9 +168,16 @@ import { CarritoService } from '../../core/services/carrito.service';
 export class CarritoComponent {
   carritoSvc = inject(CarritoService);
   private router = inject(Router);
+  readonly abriendoCheckout = signal(false);
 
-  irAlPago() {
-    this.carritoSvc.cerrarCarrito();
-    this.router.navigate(['/checkout']);
+  async irAlPago() {
+    if (this.abriendoCheckout()) return;
+    this.abriendoCheckout.set(true);
+    try {
+      if (await this.carritoSvc.sincronizado() && this.carritoSvc.carrito().items.length) {
+        this.carritoSvc.cerrarCarrito();
+        await this.router.navigate(['/checkout']);
+      }
+    } finally { this.abriendoCheckout.set(false); }
   }
 }

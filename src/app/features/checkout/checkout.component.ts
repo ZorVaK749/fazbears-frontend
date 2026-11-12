@@ -1,10 +1,9 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { CarritoService } from '../../core/services/carrito.service';
+import { CarritoParaConfirmar, CarritoService } from '../../core/services/carrito.service';
 import { OrdenService } from '../../core/services/orden.service';
-import { MsalService } from '@azure/msal-angular';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 
 type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
@@ -20,6 +19,15 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
       <header class="checkout-header">
         <h1 class="pixel text-neon-cyan">💳 TERMINAL DE PAGO FAZBEAR</h1>
         <p class="checkout-sub">Completa los datos de pago para confirmar tu pedido en Freddy Fazbear's Pizza</p>
+        @if (carritoSvc.sincronizando()) {
+          <p role="status">Sincronizando carrito antes de confirmar…</p>
+        }
+        @if (carritoSvc.errorSincronizacion()) {
+          <div role="alert" class="error-box">
+            <p>{{ carritoSvc.errorSincronizacion() }}</p>
+            <button class="btn-neon" [disabled]="carritoSvc.sincronizando()" (click)="carritoSvc.recargar()">ACTUALIZAR CARRITO</button>
+          </div>
+        }
       </header>
 
       <!-- PANTALLA DE ÉXITO -->
@@ -47,8 +55,14 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
       <!-- SI EL CARRITO ESTÁ VACÍO Y NO HAY PAGO -->
       @else if (carritoSvc.carrito().items.length === 0) {
         <div class="empty-card">
-          <p class="pixel text-neon-purple">[ NO HAY PRODUCTOS PARA PAGAR ]</p>
-          <p class="empty-sub">Tu carrito está vacío. Agrega pizzas y artículos antes de pagar.</p>
+          @if (carritoSvc.sincronizando()) {
+            <p class="pixel text-neon-purple">[ CARGANDO CARRITO ]</p>
+          } @else if (carritoSvc.errorSincronizacion()) {
+            <p class="pixel text-neon-purple">[ CARRITO SIN VERIFICAR ]</p>
+          } @else {
+            <p class="pixel text-neon-purple">[ NO HAY PRODUCTOS PARA PAGAR ]</p>
+            <p class="empty-sub">Tu carrito está vacío. Agrega pizzas y artículos antes de pagar.</p>
+          }
           <a routerLink="/catalogo" class="btn-neon btn-neon-cyan">← IR AL CATÁLOGO</a>
         </div>
       }
@@ -600,8 +614,9 @@ type MetodoPago = 'TARJETA' | 'FAZCOINS' | 'EFECTIVO';
 export class CheckoutComponent implements OnInit {
   carritoSvc = inject(CarritoService);
   private ordenSvc = inject(OrdenService);
-  private msalSvc = inject(MsalService);
   private router = inject(Router);
+  private cdr = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
 
   metodoSeleccionado: MetodoPago = 'TARJETA';
   numeroTarjeta = '';
@@ -618,7 +633,7 @@ export class CheckoutComponent implements OnInit {
   errorMsg = '';
 
   ngOnInit() {
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
+    const cuenta = this.carritoSvc.cuentaActual();
     this.emailUsuario = cuenta?.username ?? 'cliente@fazbear.com';
     this.titular = cuenta?.name || this.emailUsuario.split('@')[0].toUpperCase();
   }
@@ -634,12 +649,8 @@ export class CheckoutComponent implements OnInit {
     return num;
   }
 
-  procesarPago() {
+  async procesarPago() {
     if (this.procesando || this.pagoExitoso) return;
-    if (this.carritoSvc.carrito().items.length === 0) {
-      this.errorMsg = 'El carrito está vacío';
-      return;
-    }
 
     if (this.metodoSeleccionado === 'TARJETA') {
       const numSinEspacio = this.numeroTarjeta.replace(/\s/g, '');
@@ -659,12 +670,28 @@ export class CheckoutComponent implements OnInit {
 
     this.procesando = true;
     this.errorMsg = '';
-    const cuenta = this.msalSvc.instance.getAllAccounts()[0];
+    let snapshot: CarritoParaConfirmar;
+    try {
+      snapshot = await this.carritoSvc.prepararCheckout();
+    } catch {
+      if (this.destroyRef.destroyed) return;
+      this.procesando = false;
+      this.errorMsg = 'No se pudo sincronizar el carrito o está vacío. Revísalo y pulsa ACTUALIZAR antes de confirmar.';
+      this.cdr.markForCheck();
+      return;
+    }
+    if (this.destroyRef.destroyed) return;
+    if (!this.carritoSvc.snapshotVigente(snapshot)) {
+      this.procesando = false;
+      this.errorMsg = 'La sesión o el carrito cambió. Revisa el carrito antes de confirmar.';
+      this.cdr.markForCheck();
+      return;
+    }
 
     const payload = {
-      usuarioId: cuenta?.localAccountId ?? 'anonimo',
-      emailUsuario: this.emailUsuario,
-      items: this.carritoSvc.carrito().items.map(i => ({
+      usuarioId: snapshot.usuarioId,
+      emailUsuario: snapshot.emailUsuario,
+      items: snapshot.items.map(i => ({
         productoId: i.productoId,
         nombreProducto: i.nombreProducto,
         cantidad: i.cantidad,
@@ -672,15 +699,22 @@ export class CheckoutComponent implements OnInit {
       }))
     };
 
-    this.montoPagado = this.carritoSvc.carrito().total;
+    this.montoPagado = snapshot.total;
 
     this.ordenSvc.confirmar(payload).subscribe({
       next: (res) => {
+        this.carritoSvc.limpiarTrasCompra(snapshot);
+        if (this.destroyRef.destroyed) return;
+        if (!this.carritoSvc.mismaSesion(snapshot)) {
+          this.procesando = false;
+          this.errorMsg = 'La sesión cambió. Comprueba el resultado en el historial de la cuenta original.';
+          this.cdr.markForCheck();
+          return;
+        }
         this.procesando = false;
         this.pagoExitoso = true;
         this.pedidoIdGenerado = res.pedidoId;
         this.montoPagado = res.total;
-        this.carritoSvc.vaciar();
       },
       error: (err) => {
         this.procesando = false;

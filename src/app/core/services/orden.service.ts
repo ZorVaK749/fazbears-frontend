@@ -6,7 +6,8 @@ import { ItemCarrito } from './carrito.service';
 export interface ConfirmarOrdenRequest {
   usuarioId: string;
   emailUsuario: string;
-  items: ItemCarrito[];
+  // El ID de ítem pertenece a ms-carrito, no al contrato existente de confirmación.
+  items: Omit<ItemCarrito, 'id'>[];
 }
 
 export interface OrdenResponse {

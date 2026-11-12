@@ -142,24 +142,21 @@ export class NavbarComponent implements OnInit {
   carritoSvc = inject(CarritoService);
   private msalSvc = inject(MsalService);
 
-  usuario: AccountInfo | null = null;
-  esAdmin = false;
+  get usuario(): AccountInfo | null { return this.carritoSvc.cuentaActual(); }
+  get esAdmin(): boolean { return ADMIN_EMAILS.includes(this.usuario?.username ?? ''); }
 
   get inicial(): string {
     return (this.usuario?.name ?? this.usuario?.username ?? '?')[0].toUpperCase();
   }
 
   ngOnInit() {
-    const cuentas = this.msalSvc.instance.getAllAccounts();
-    if (cuentas.length > 0) {
-      this.usuario = cuentas[0];
-      this.esAdmin = ADMIN_EMAILS.includes(this.usuario.username ?? '');
-    }
+    void this.carritoSvc.inicializar();
   }
 
   logout(event: Event) {
     event.preventDefault();
     event.stopPropagation(); // Evita que el click vaya al routerLink del perfil
+    this.carritoSvc.cerrarSesion();
     this.msalSvc.logoutRedirect({
       postLogoutRedirectUri: window.location.origin + '/login',
     });
