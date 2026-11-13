@@ -5,6 +5,7 @@ import { AccountInfo } from '@azure/msal-browser';
 import { Observable, Subject, firstValueFrom, takeUntil, timeout } from 'rxjs';
 import { Producto } from './producto.service';
 import { AZURE_TENANT_ID } from '../auth/auth.config';
+import { API_BASE_URL } from '../api.config';
 
 export interface ItemCarrito {
   id: number;
@@ -46,7 +47,7 @@ interface SesionCarrito {
 export class CarritoService {
   // Estado confirmado (no optimista): evita representar como guardada una mutación rechazada.
   // La cola es local a esta instancia; no sustituye autorización/idempotencia/concurrencia backend.
-  private readonly base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/carrito';
+  private readonly base = `${inject(API_BASE_URL)}/carrito`;
   private readonly http = inject(HttpClient);
   private readonly msalSvc = inject(MsalService);
   private readonly estado = signal<CarritoState>({ items: [], total: 0 });

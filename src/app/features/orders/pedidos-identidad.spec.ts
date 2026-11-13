@@ -15,9 +15,11 @@ import { CarritoComponent } from '../cart/carrito.component';
 import { PerfilComponent } from '../perfil/perfil.component';
 import { ReportesComponent } from '../reportes/reportes.component';
 import { OrdersComponent } from './orders.component';
+import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 
 @Component({ selector: 'app-navbar', standalone: true, template: '' }) class NavbarStub {}
 @Component({ selector: 'app-carrito', standalone: true, template: '' }) class CartStub {}
+@Component({ selector: 'app-fazcoins', standalone: true, template: '' }) class WalletStub {}
 const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api';
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -41,7 +43,7 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
         { provide: MsalService, useValue: { instance: { getActiveAccount: () => active,
           getAllAccounts: () => active ? [active] : [] }, logoutRedirect: logout } },
       ],
-    }).overrideComponent(PerfilComponent, { remove: { imports: [NavbarComponent] }, add: { imports: [NavbarStub] } })
+    }).overrideComponent(PerfilComponent, { remove: { imports: [NavbarComponent, FazcoinsComponent] }, add: { imports: [NavbarStub, WalletStub] } })
       .overrideComponent(OrdersComponent, { remove: { imports: [NavbarComponent, CarritoComponent] },
         add: { imports: [NavbarStub, CartStub] } })
       .overrideComponent(ReportesComponent, { remove: { imports: [NavbarComponent] }, add: { imports: [NavbarStub] } })

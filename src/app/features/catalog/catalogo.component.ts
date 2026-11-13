@@ -3,6 +3,8 @@ import { ProductoService, Producto } from '../../core/services/producto.service'
 import { CarritoService } from '../../core/services/carrito.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { CarritoComponent } from '../cart/carrito.component';
+import { RecomendacionesComponent } from '../../shared/recomendaciones/recomendaciones.component';
+import { RecomendacionesService } from '../../core/services/recomendaciones.service';
 
 type Categoria = 'TODOS' | 'PIZZA' | 'BEBIDA' | 'SOUVENIR' | 'ANIMATRONICO';
 
@@ -16,7 +18,7 @@ interface CategoriaTab {
 @Component({
   selector: 'app-catalogo',
   standalone: true,
-  imports: [NavbarComponent, CarritoComponent],
+  imports: [NavbarComponent, CarritoComponent, RecomendacionesComponent],
   template: `
     <app-navbar />
 
@@ -26,6 +28,7 @@ interface CategoriaTab {
         <p class="catalogo-sub">Seleccione sus productos — Freddy Fazbear's Pizza &copy; 1987</p>
       </header>
 
+      <app-recomendaciones />
       <!-- Tabs de categoría -->
       <div class="tabs-container">
         @for (tab of tabs; track tab.id) {
@@ -66,7 +69,7 @@ interface CategoriaTab {
 
               <!-- Info -->
               <div class="producto-info">
-                <h3 class="producto-nombre">{{ producto.nombre }}</h3>
+                <h3 class="producto-nombre"><button class="btn-neon" (click)="ver(producto)">{{ producto.nombre }}</button></h3>
                 <p class="producto-desc">{{ producto.descripcion }}</p>
                 <div class="producto-footer">
                   <span class="producto-precio pixel text-neon-green">
@@ -173,6 +176,13 @@ export class CatalogoComponent implements OnInit {
   private productoSvc = inject(ProductoService);
   private carritoSvc = inject(CarritoService);
   private cdr = inject(ChangeDetectorRef);
+  private recomendaciones = inject(RecomendacionesService);
+  ver(producto: Producto) { this.registrar(producto.id, 'VIEW'); }
+  private registrar(id: number, tipo: 'VIEW' | 'SELECT') {
+    this.recomendaciones.interaccion(id, tipo).subscribe({ error: () => {
+      console.warn('Interacción no registrada; no se reenvió automáticamente.');
+    } });
+  }
 
   todos: Producto[] = [];
   productosFiltrados: Producto[] = [];
@@ -215,6 +225,7 @@ export class CatalogoComponent implements OnInit {
   }
 
   agregar(producto: Producto) {
+    this.registrar(producto.id, 'SELECT');
     this.carritoSvc.agregarProducto(producto);
   }
 

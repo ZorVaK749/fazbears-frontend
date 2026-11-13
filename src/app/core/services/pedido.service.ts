@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { API_BASE_URL } from '../api.config';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
@@ -23,7 +24,7 @@ export interface Pedido {
 
 @Injectable({ providedIn: 'root' })
 export class PedidoService {
-  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/pedidos';
+  private base = `${inject(API_BASE_URL)}/pedidos`;
 
   constructor(private http: HttpClient) {}
 

@@ -1,4 +1,5 @@
 import { MsalInterceptorConfiguration, MsalGuardConfiguration } from '@azure/msal-angular';
+import { environment } from '../../../environments/environment';
 import {
   PublicClientApplication,
   InteractionType,
@@ -60,10 +61,11 @@ export function MSALInstanceFactory(): PublicClientApplication {
 }
 
 // ─── Interceptor config: adjunta token automáticamente a llamadas a la API ───
-export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
+export function MSALInterceptorConfigFactory(apiBaseUrl = environment.apiBaseUrl): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>();
 
-  const API_BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com';
+   const API_BASE = apiBaseUrl.startsWith('/')
+     ? `${window.location.origin}${apiBaseUrl}` : apiBaseUrl;
 
   // Rutas protegidas: el interceptor adjuntará el Bearer JWT en estas URLs
   for (const ruta of [
@@ -73,8 +75,11 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
     'orden',
     'notificaciones',
     'reportes',
+    'pagos',
+    'fidelizacion',
+    'recomendaciones',
   ]) {
-    protectedResourceMap.set(`${API_BASE}/api/${ruta}`, [API_SCOPE]);
+    protectedResourceMap.set(`${API_BASE}/${ruta}`, [API_SCOPE]);
   }
 
   return {

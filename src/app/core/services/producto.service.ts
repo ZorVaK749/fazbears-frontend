@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { API_BASE_URL } from '../api.config';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
@@ -13,7 +14,7 @@ export interface Producto {
 
 @Injectable({ providedIn: 'root' })
 export class ProductoService {
-  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/productos';
+  private base = `${inject(API_BASE_URL)}/productos`;
 
   constructor(private http: HttpClient) {}
 

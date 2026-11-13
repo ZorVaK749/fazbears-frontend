@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { API_BASE_URL } from '../api.config';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ItemCarrito } from './carrito.service';
@@ -19,7 +20,7 @@ export interface OrdenResponse {
 
 @Injectable({ providedIn: 'root' })
 export class OrdenService {
-  private base = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/orden';
+  private base = `${inject(API_BASE_URL)}/orden`;
 
   constructor(private http: HttpClient) {}
 

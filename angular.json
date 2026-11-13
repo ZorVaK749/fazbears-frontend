@@ -30,6 +30,11 @@
             ]
           },
           "configurations": {
+            "local": {
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.local.ts" }]
+            },
             "production": {
               "budgets": [
                 {
@@ -56,6 +61,10 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "configurations": {
+            "local": {
+              "buildTarget": "fazbear-frontend:build:local",
+              "proxyConfig": "proxy.conf.json"
+            },
             "production": {
               "buildTarget": "fazbear-frontend:build:production"
             },

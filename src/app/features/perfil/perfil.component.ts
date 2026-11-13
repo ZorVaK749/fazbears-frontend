@@ -6,11 +6,12 @@ import { AccountInfo } from '@azure/msal-browser';
 import { Pedido } from '../../core/services/pedido.service';
 import { CarritoService } from '../../core/services/carrito.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
+import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 
 @Component({
   selector: 'app-perfil',
   standalone: true,
-  imports: [NavbarComponent, RouterLink],
+  imports: [NavbarComponent, RouterLink, FazcoinsComponent],
   template: `
     <app-navbar />
 
@@ -38,6 +39,7 @@ import { MisPedidosService } from '../../core/services/mis-pedidos.service';
           </div>
         </div>
 
+        <app-fazcoins />
         <!-- Stats -->
         <div class="stats-grid">
           <div class="stat-card">
