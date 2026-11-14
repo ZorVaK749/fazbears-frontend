@@ -1,5 +1,14 @@
 # Integración Angular EV3
 
+## Imagen AWS preparada (13/11)
+
+`Dockerfile.aws` usa build production/Gateway existente, no configuración LAB.
+Sirve HTTP80 detrás del ingress HTTPS aprobado, sin claves/certificado privado
+generado en imagen. `ghcr-versioned.yml` es manual, publicación opt-in, no deploy.
+Reusable fijado al commit de Pago indicado en workflow (publicarlo primero).
+Requiere revisar rutas Gateway/Entra real; no sustituir EC2 EV2 automáticamente.
+Procedimiento y rollback: repo Pago `docs/AWS_DEPLOY_ROLLBACK.md`.
+
 ## Ejecución local
 
 - Node 22.22.3+ o 24.15+ (validación local/CI: 24.19.0), npm y `npm ci`.
