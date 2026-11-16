@@ -5,12 +5,13 @@ import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { EventType, InteractionStatus } from '@azure/msal-browser';
 import { filter } from 'rxjs';
 import { CarritoService } from './core/services/carrito.service';
+import { CarritoComponent } from './features/cart/carrito.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet],
-  template: `<router-outlet />`,
+  imports: [RouterOutlet, CarritoComponent],
+  template: `<router-outlet /><app-carrito />`,
   styles: []
 })
 export class App implements OnInit {

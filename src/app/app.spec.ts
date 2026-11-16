@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
@@ -22,7 +23,16 @@ describe('App: inicialización del carrito con MSAL real en runtime', () => {
       { provide: MsalService, useValue: { handleRedirectObservable: () => redirect,
         instance: { setActiveAccount } } },
       { provide: MsalBroadcastService, useValue: { inProgress$: progreso, msalSubject$: eventos } },
-      { provide: CarritoService, useValue: { inicializar, cerrarSesion } },
+      { provide: CarritoService, useValue: {
+        inicializar,
+        cerrarSesion,
+        abierto: signal(false),
+        cerrarCarrito: vi.fn(),
+        sincronizando: signal(false),
+        errorSincronizacion: signal(null),
+        carrito: signal({ items: [], total: 0 }),
+        recargar: vi.fn(),
+      } },
     ] }).compileComponents();
   });
 
@@ -31,6 +41,7 @@ describe('App: inicialización del carrito con MSAL real en runtime', () => {
   it('conserva router-outlet y no pide carrito antes de procesar sesión', () => {
     const fixture = create();
     expect(fixture.nativeElement.querySelector('router-outlet')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-carrito')).not.toBeNull();
     expect(inicializar).not.toHaveBeenCalled();
   });
   it('elige cuenta del redirect antes de inicializar', () => {

@@ -8,7 +8,7 @@ import { CarritoService } from './carrito.service';
 import { Producto } from './producto.service';
 import { AZURE_TENANT_ID } from '../auth/auth.config';
 
-const BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/carrito';
+const BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api/carrito';
 const producto: Producto = { id: 7, nombre: 'Pizza Freddy', descripcion: 'Pizza', precio: 12.99, categoria: 'PIZZA' };
 const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 const cuenta = (uid: string, home = uid): AccountInfo => ({ localAccountId: uid, homeAccountId: home,

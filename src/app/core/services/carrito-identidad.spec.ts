@@ -8,7 +8,7 @@ import { AZURE_TENANT_ID } from '../auth/auth.config';
 import { CarritoService } from './carrito.service';
 import { Producto } from './producto.service';
 
-const BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api/carrito';
+const BASE = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api/carrito';
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));

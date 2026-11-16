@@ -2,7 +2,6 @@ import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { ProductoService, Producto } from '../../core/services/producto.service';
 import { CarritoService } from '../../core/services/carrito.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
-import { CarritoComponent } from '../cart/carrito.component';
 import { RecomendacionesComponent } from '../../shared/recomendaciones/recomendaciones.component';
 import { RecomendacionesService } from '../../core/services/recomendaciones.service';
 
@@ -18,7 +17,7 @@ interface CategoriaTab {
 @Component({
   selector: 'app-catalogo',
   standalone: true,
-  imports: [NavbarComponent, CarritoComponent, RecomendacionesComponent],
+  imports: [NavbarComponent, RecomendacionesComponent],
   template: `
     <app-navbar />
 
@@ -92,9 +91,6 @@ interface CategoriaTab {
         </div>
       }
     </main>
-
-    <!-- Panel carrito -->
-    <app-carrito />
   `,
   styles: [`
     .catalogo-main {

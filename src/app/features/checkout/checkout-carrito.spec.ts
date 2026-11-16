@@ -14,7 +14,7 @@ import { AZURE_TENANT_ID } from '../../core/auth/auth.config';
 
 @Component({ selector: 'app-navbar', standalone: true, template: '' }) class NavbarStub {}
 @Component({ selector: 'app-fazcoins', standalone: true, template: '' }) class WalletStub {}
-const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api';
+const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api';
 const BASE = `${API}/carrito`;
 const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 const account = (uid: string): AccountInfo => ({ localAccountId: uid, homeAccountId: uid,

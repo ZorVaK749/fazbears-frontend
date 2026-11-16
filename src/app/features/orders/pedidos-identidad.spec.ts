@@ -20,7 +20,7 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 @Component({ selector: 'app-navbar', standalone: true, template: '' }) class NavbarStub {}
 @Component({ selector: 'app-carrito', standalone: true, template: '' }) class CartStub {}
 @Component({ selector: 'app-fazcoins', standalone: true, template: '' }) class WalletStub {}
-const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/api';
+const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api';
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
