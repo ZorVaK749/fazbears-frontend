@@ -64,8 +64,8 @@ export function MSALInstanceFactory(): PublicClientApplication {
 export function MSALInterceptorConfigFactory(apiBaseUrl = environment.apiBaseUrl): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>();
 
-   const API_BASE = apiBaseUrl.startsWith('/')
-     ? `${window.location.origin}${apiBaseUrl}` : apiBaseUrl;
+  const API_BASE = apiBaseUrl.startsWith('/')
+    ? `${window.location.origin}${apiBaseUrl}` : apiBaseUrl;
 
   // Rutas protegidas: el interceptor adjuntará el Bearer JWT en estas URLs
   for (const ruta of [
@@ -78,13 +78,16 @@ export function MSALInterceptorConfigFactory(apiBaseUrl = environment.apiBaseUrl
     'pagos',
     'fidelizacion',
     'recomendaciones',
+    'analytics',
   ]) {
     protectedResourceMap.set(`${API_BASE}/${ruta}`, [API_SCOPE]);
+    protectedResourceMap.set(`${API_BASE}/${ruta}/*`, [API_SCOPE]);
   }
 
   return {
     interactionType: InteractionType.Redirect,
     protectedResourceMap,
+    strictMatching: true,
   };
 }
 

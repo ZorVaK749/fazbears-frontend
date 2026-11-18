@@ -8,8 +8,9 @@ describe('MSAL cart URL compatibility', () => {
   });
   it('protects payment, reward and recommendation routes on the configured production host', () => {
     const map = MSALInterceptorConfigFactory().protectedResourceMap;
-    for (const route of ['pagos', 'orden', 'fidelizacion', 'recomendaciones', 'productos']) {
+    for (const route of ['pagos', 'orden', 'fidelizacion', 'recomendaciones', 'productos', 'analytics', 'carrito', 'pedidos']) {
       expect(map.get(`https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api/${route}`)).toEqual([API_SCOPE]);
+      expect(map.get(`https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api/${route}/*`)).toEqual([API_SCOPE]);
     }
   });
   it('local relative API protects only current-origin API, never arbitrary hosts or local gateway direct', () => {
