@@ -1,9 +1,11 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ProductoService, Producto } from '../../core/services/producto.service';
 import { CarritoService } from '../../core/services/carrito.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RecomendacionesComponent } from '../../shared/recomendaciones/recomendaciones.component';
 import { RecomendacionesService } from '../../core/services/recomendaciones.service';
+import { ClpPipe } from '../../shared/clp.pipe';
 
 type Categoria = 'TODOS' | 'PIZZA' | 'BEBIDA' | 'SOUVENIR' | 'ANIMATRONICO';
 
@@ -48,9 +50,9 @@ interface CategoriaTab {
       }
 
       @if (error) {
-        <div class="estado-centro">
-          <p class="pixel text-neon-red">⚠ ERROR: No se pudo conectar con el servidor</p>
-          <p class="error-hint">¿Está corriendo el MS Productos en localhost:8081?</p>
+        <div class="estado-centro" role="alert">
+          <p class="pixel text-neon-red">No se pudo cargar el catálogo</p>
+          <p class="error-hint">{{ error }}</p>
           <button class="btn-neon" (click)="cargarProductos()">REINTENTAR</button>
         </div>
       }
@@ -184,7 +186,7 @@ export class CatalogoComponent implements OnInit {
   productosFiltrados: Producto[] = [];
   categoriaActiva: Categoria = 'TODOS';
   cargando = true;
-  error = false;
+  error = '';
 
   tabs: CategoriaTab[] = [
     { id: 'TODOS', label: 'TODOS', emoji: '📋' },
@@ -197,7 +199,7 @@ export class CatalogoComponent implements OnInit {
   ngOnInit() { this.cargarProductos(); }
 
   cargarProductos() {
-    this.cargando = true; this.error = false;
+    this.cargando = true; this.error = '';
     this.productoSvc.getAll().subscribe({
       next: (data) => {
         this.todos = data;
@@ -205,12 +207,24 @@ export class CatalogoComponent implements OnInit {
         this.cargando = false;
         this.cdr.detectChanges(); // Fix: MSAL responde fuera de Angular Zone
       },
-      error: () => {
+      error: (failure: unknown) => {
         this.cargando = false;
-        this.error = true;
+        this.error = this.mensajeError(failure);
         this.cdr.detectChanges(); // Fix: forzar actualización en caso de error
       }
     });
+  }
+
+  private mensajeError(failure: unknown): string {
+    if (failure instanceof HttpErrorResponse) {
+      if (failure.status === 401) return 'Vuelve a iniciar sesión para consultar el catálogo (HTTP 401).';
+      if (failure.status === 403) return 'La cuenta actual no tiene acceso al catálogo (HTTP 403).';
+      if (failure.status >= 500) {
+        return `El servicio de catálogo está temporalmente indisponible (HTTP ${failure.status}).`;
+      }
+      if (failure.status === 0) return 'No se recibió respuesta. Comprueba tu conexión y reintenta.';
+    }
+    return 'Reintenta para cargar los productos.';
   }
 
   filtrar(cat: Categoria) {
@@ -232,4 +246,3 @@ export class CatalogoComponent implements OnInit {
     return map[cat] ?? '📦';
   }
 }
-import { ClpPipe } from '../../shared/clp.pipe';
