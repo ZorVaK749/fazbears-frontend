@@ -1,0 +1,158 @@
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { firstValueFrom, timeout } from 'rxjs';
+import { API_BASE_URL } from '../../core/api.config';
+import { CarritoService } from '../../core/services/carrito.service';
+import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
+
+const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
+const PENDING = 'pedidos360.webpay.paymentId';
+interface Retorno { tokenWs: string | null; tbkToken: string | null; buyOrder: string | null; sessionId: string | null; }
+interface PagoWebpay {
+  pagoId: string; operacionId: string; estado: string; importe: number;
+  moneda: string; simulacion: boolean;
+}
+
+@Component({
+  standalone: true,
+  selector: 'app-webpay',
+  imports: [RouterLink],
+  template: `
+    <main>
+      <h1>Webpay Plus de integración</h1>
+      <p>Usa los datos de prueba oficiales de Transbank en su formulario de integración.</p>
+      <p role="status">{{ mensaje() }}</p>
+      @if (pedido()) { <a routerLink="/pedidos">Ver pedido #{{ pedido() }}</a> }
+      @if (disponible() && !pedido()) {
+        @if (retorno || pendiente()) {
+          <button class="btn-neon" [disabled]="ocupado()" (click)="retomar()">Verificar el mismo pago</button>
+        } @else {
+          <button class="btn-neon" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
+        }
+      }
+      <a routerLink="/checkout">Volver al checkout</a>
+    </main>
+  `,
+  styles: [`main { max-width: 780px; margin: auto; padding: 2rem; } a, button { margin: .75rem; }`],
+})
+export class WebpayComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+  private readonly api = inject(API_BASE_URL);
+  private readonly route = inject(ActivatedRoute);
+  private readonly cart = inject(CarritoService);
+  private readonly destroy = inject(DestroyRef);
+  private quote?: Cotizacion;
+  private readonly quoteKey = crypto.randomUUID();
+  private readonly paymentKey = crypto.randomUUID();
+  readonly ocupado = signal(false);
+  readonly disponible = signal(false);
+  readonly pedido = signal<number | null>(null);
+  readonly mensaje = signal('Comprobando disponibilidad…');
+  readonly pendiente = signal(sessionStorage.getItem(PENDING));
+  retorno?: Retorno;
+
+  async ngOnInit() {
+    const params = this.route.snapshot.queryParamMap;
+    const fields = { tokenWs: params.get('token_ws'), tbkToken: params.get('TBK_TOKEN'),
+      buyOrder: params.get('TBK_ORDEN_COMPRA'), sessionId: params.get('TBK_ID_SESION') };
+    if (Object.values(fields).some(Boolean)) {
+      this.retorno = fields;
+      window.history.replaceState(window.history.state, '', window.location.pathname);
+    }
+    try {
+      await firstValueFrom(this.http.get(`${this.api}/pagos/webpay/capacidad`).pipe(timeout(5000)));
+      if (this.destroy.destroyed) return;
+      this.disponible.set(true);
+      if (this.retorno || this.pendiente()) await this.retomar();
+      else this.mensaje.set('El servidor cotiza el carrito antes de abrir Transbank.');
+    } catch {
+      this.mensaje.set('Webpay de integración no está disponible en este entorno.');
+    }
+  }
+
+  async iniciar() {
+    if (this.ocupado() || this.pendiente()) return;
+    this.ocupado.set(true);
+    try {
+      const snapshot = await this.cart.prepararCheckout();
+      if (this.destroy.destroyed || !this.cart.snapshotVigente(snapshot)) throw new Error();
+      this.quote ??= await this.post<Cotizacion>('/orden/cotizaciones', {
+        items: snapshot.items.map(item => ({ productoId: item.productoId, cantidad: item.cantidad })),
+      }, this.quoteKey);
+      if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot)
+          || this.quote.ownerId !== snapshot.usuarioId || this.quote.tenantId !== snapshot.tenantId) throw new Error();
+      const redirect = await this.post<{ pagoId: string; token: string; url: string }>('/pagos/webpay', {
+        operacionId: this.quote.operacionId,
+      }, this.paymentKey);
+      if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot) || redirect.url !== FORM
+          || !/^[A-Za-z0-9]{20,128}$/.test(redirect.token)) throw new Error();
+      sessionStorage.setItem(PENDING, redirect.pagoId);
+      this.pendiente.set(redirect.pagoId);
+      const form = document.createElement('form');
+      form.action = FORM;
+      form.method = 'POST';
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'token_ws';
+      hidden.value = redirect.token;
+      form.append(hidden);
+      document.body.append(form);
+      form.submit();
+      form.remove();
+    } catch (error) {
+      this.mensaje.set(error instanceof HttpErrorResponse && error.status === 422
+        ? 'Webpay requiere una cotización en pesos enteros.'
+        : 'Inicio sin confirmar. Reintenta desde esta pantalla para conservar la cotización y la clave.');
+    } finally {
+      this.ocupado.set(false);
+    }
+  }
+
+  async retomar() {
+    if (this.ocupado()) return;
+    this.ocupado.set(true);
+    try {
+      const id = this.pendiente();
+      const pago = this.retorno
+        ? await this.post<PagoWebpay>('/pagos/webpay/retorno', this.retorno)
+        : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id ?? '')}/estado`, {});
+      if (this.destroy.destroyed || pago.simulacion !== false || pago.moneda !== 'CLP') throw new Error();
+      if (pago.estado === 'DECLINED') {
+        this.mensaje.set('Transbank rechazó el pago. Puedes iniciar una nueva cotización al regresar al checkout.');
+        this.clear();
+      } else if (pago.estado === 'APPROVED') {
+        sessionStorage.setItem(PENDING, pago.pagoId);
+        this.pendiente.set(pago.pagoId);
+        const pedido = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
+          pagoId: pago.pagoId, operacionId: pago.operacionId,
+        }, `webpay-${pago.pagoId}`);
+        if (!pedido.pedidoId || pedido.simulacion !== false || pedido.pagoId !== pago.pagoId
+            || pedido.total !== pago.importe) throw new Error();
+        this.pedido.set(pedido.pedidoId);
+        this.mensaje.set('Pago de integración verificado y pedido confirmado.');
+        this.clear();
+      } else {
+        this.mensaje.set(this.retorno && !this.retorno.tokenWs
+          ? 'Transbank devolvió una cancelación o expiración. La transacción no está aprobada.'
+          : 'Pago sin aprobación confirmada. Verifica el mismo pago antes de iniciar otro.');
+      }
+    } catch {
+      this.mensaje.set('Verificación pendiente. Reintenta desde esta pantalla con la cuenta que inició el pago.');
+    } finally {
+      this.ocupado.set(false);
+    }
+  }
+
+  private clear() {
+    this.retorno = undefined;
+    this.pendiente.set(null);
+    sessionStorage.removeItem(PENDING);
+  }
+
+  private post<T>(path: string, body: unknown, key?: string): Promise<T> {
+    return firstValueFrom(this.http.post<T>(this.api + path, body, {
+      headers: key ? { 'Idempotency-Key': key } : {},
+    }).pipe(timeout(15000)));
+  }
+}

@@ -14,7 +14,7 @@ export interface Pago {
   importe: number; moneda: string; simulacion: boolean; creadoEn: string;
 }
 export interface ConfirmacionPago {
-  pedidoId: number; mensaje: string; estado: string; total: number; pagoId: string; simulacion: true;
+  pedidoId: number; mensaje: string; estado: string; total: number; pagoId: string; simulacion: boolean;
 }
 interface Flujo {
   snapshot: CarritoParaConfirmar; instrumento: InstrumentoPrueba;

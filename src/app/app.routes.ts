@@ -53,5 +53,11 @@ export const routes: Routes = [
   },
 
   // Wildcard → login
+  {
+    path: 'checkout/webpay',
+    loadComponent: () =>
+      import('./features/checkout/webpay.component').then(m => m.WebpayComponent),
+    canActivate: [MsalGuard],
+  },
   { path: '**', redirectTo: 'login' },
 ];

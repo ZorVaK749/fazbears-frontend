@@ -43,6 +43,9 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
             {{ procesando ? 'PROCESANDO…' : pagoSvc.pendiente() ? 'REINTENTAR MISMA OPERACIÓN' : 'CONFIRMAR PAGO SIMULADO' }}
           </button>
           <button class="btn-neon" [disabled]="procesando" (click)="nuevoIntento()">Nuevo intento solo tras rechazo/bloqueo definitivo</button>
+          @if (!procesando && !pagoSvc.pendiente()) {
+            <a routerLink="/checkout/webpay" class="btn-neon">WEBPAY PLUS DE INTEGRACIÓN</a>
+          }
         </section>
       }
       @if (errorMsg) { <p role="alert">{{ errorMsg }}</p> }
