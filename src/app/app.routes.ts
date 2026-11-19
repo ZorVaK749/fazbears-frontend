@@ -52,12 +52,18 @@ export const routes: Routes = [
     canActivate: [MsalGuard],
   },
 
-  // Wildcard → login
   {
     path: 'checkout/webpay',
     loadComponent: () =>
       import('./features/checkout/webpay.component').then(m => m.WebpayComponent),
     canActivate: [MsalGuard],
   },
+  {
+    path: 'actividad',
+    loadComponent: () =>
+      import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
+    canActivate: [MsalGuard],
+  },
+  // Wildcard → login
   { path: '**', redirectTo: 'login' },
 ];

@@ -25,6 +25,7 @@ import { AccountInfo } from '@azure/msal-browser';
         <a routerLink="/pedidos" routerLinkActive="nav-active" class="nav-link pixel">
           {{ esAdmin ? 'GESTIONAR PEDIDOS' : 'MIS PEDIDOS' }}
         </a>
+        <a routerLink="/actividad" routerLinkActive="nav-active" class="nav-link pixel">MI ACTIVIDAD</a>
         @if (esAdmin) {
           <a routerLink="/reportes" routerLinkActive="nav-active" class="nav-link pixel nav-link-admin">
             📊 REPORTES
