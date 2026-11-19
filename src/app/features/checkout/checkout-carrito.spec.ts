@@ -66,7 +66,7 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     req.flush(payment('APPROVED', importe), { status: 201, statusText: 'Created' }); await turno();
   }
 
-  it('shows Webpay and simulation and keeps Webpay visible during a simulated payment', () => {
+  it('shows Webpay and simulation and keeps Webpay visible during a simulated payment', async () => {
     const fixture = create();
     const webpay = fixture.debugElement.query(By.css('#btn-webpay'));
     expect(webpay.injector.get(RouterLink).urlTree?.toString()).toBe('/checkout/webpay');
@@ -74,7 +74,8 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     expect(fixture.nativeElement.querySelector('#btn-confirmar-pago')).not.toBeNull();
 
     fixture.componentInstance.procesando = true;
-    fixture.detectChanges();
+    fixture.changeDetectorRef.markForCheck();
+    await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('#btn-webpay').disabled).toBe(true);
   });
 
