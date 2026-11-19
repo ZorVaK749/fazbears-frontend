@@ -12,8 +12,8 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
   template: `
     <app-navbar />
     <main>
-      <h1 class="pixel text-neon-cyan">Pago simulado</h1>
-      <p>No se realizan cargos reales. No ingreses datos bancarios.</p>
+      <h1 class="pixel text-neon-cyan">Checkout</h1>
+      <p>Elige un medio de pago de prueba.</p>
       @if (carritoSvc.sincronizando()) { <p role="status">Sincronizando carrito antes de confirmar…</p> }
       @if (carritoSvc.errorSincronizacion()) {
         <div role="alert">{{ carritoSvc.errorSincronizacion() }}
@@ -33,19 +33,31 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
             <p>{{ item.nombreProducto }} × {{ item.cantidad }} · {{ item.precioUnitario * item.cantidad }}</p>
           } @empty { <p>No hay productos para pagar.</p> }
           <p>Total de referencia: {{ carritoSvc.carrito().total }}. El servidor cotiza el importe final.</p>
-          <label for="instrumento">Instrumento de simulación</label>
-          <select id="instrumento" [(ngModel)]="instrumento" [disabled]="procesando || pagoSvc.pendiente()">
-            <option value="sim-approved">sim-approved · aprobación de prueba</option>
-            <option value="sim-declined">sim-declined · rechazo de prueba</option>
-          </select>
-          <p>Un resultado incierto conserva la cotización y el instrumento original. Reintenta sin iniciar otro pago.</p>
-          <button id="btn-confirmar-pago" class="btn-neon" [disabled]="procesando" (click)="procesarPago()">
-            {{ procesando ? 'PROCESANDO…' : pagoSvc.pendiente() ? 'REINTENTAR MISMA OPERACIÓN' : 'CONFIRMAR PAGO SIMULADO' }}
-          </button>
-          <button class="btn-neon" [disabled]="procesando" (click)="nuevoIntento()">Nuevo intento solo tras rechazo/bloqueo definitivo</button>
-          @if (!procesando && !pagoSvc.pendiente()) {
-            <a routerLink="/checkout/webpay" class="btn-neon">WEBPAY PLUS DE INTEGRACIÓN</a>
-          }
+          <div class="payment-options">
+            <section class="payment-option" aria-labelledby="webpay-heading">
+              <h3 id="webpay-heading">Webpay Plus de integración</h3>
+              <p>Paga con una tarjeta de prueba en Transbank. La cotización debe estar en pesos enteros.</p>
+              <button id="btn-webpay" type="button" class="btn-neon btn-neon-cyan"
+                      [disabled]="procesando || pagoSvc.pendiente()"
+                      routerLink="/checkout/webpay">CONTINUAR CON WEBPAY</button>
+              @if (procesando || pagoSvc.pendiente()) {
+                <p role="status">Resuelve primero el pago simulado de esta sesión.</p>
+              }
+            </section>
+            <section class="payment-option" aria-labelledby="simulation-heading">
+              <h3 id="simulation-heading">Pago simulado</h3>
+              <label for="instrumento">Instrumento de simulación</label>
+              <select id="instrumento" [(ngModel)]="instrumento" [disabled]="procesando || pagoSvc.pendiente()">
+                <option value="sim-approved">sim-approved · aprobación de prueba</option>
+                <option value="sim-declined">sim-declined · rechazo de prueba</option>
+              </select>
+              <p>El reintento conserva la cotización y el instrumento original.</p>
+              <button id="btn-confirmar-pago" class="btn-neon" [disabled]="procesando" (click)="procesarPago()">
+                {{ procesando ? 'PROCESANDO…' : pagoSvc.pendiente() ? 'REINTENTAR MISMA OPERACIÓN' : 'CONFIRMAR PAGO SIMULADO' }}
+              </button>
+              <button class="btn-neon" [disabled]="procesando" (click)="nuevoIntento()">Nuevo intento tras rechazo o bloqueo</button>
+            </section>
+          </div>
         </section>
       }
       @if (errorMsg) { <p role="alert">{{ errorMsg }}</p> }
@@ -53,7 +65,16 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
       <a routerLink="/catalogo" class="btn-neon">VOLVER AL CATÁLOGO</a>
     </main>
   `,
-  styles: [`main { max-width: 900px; margin: auto; padding: 2rem; } section { padding: 1.5rem; margin: 1rem 0; } button, select { margin: .5rem; } h1 { font-size: 1.5rem; }`],
+  styles: [`
+    main { max-width: 900px; margin: auto; padding: 2rem; }
+    section { padding: 1.5rem; margin: 1rem 0; }
+    h1 { font-size: 1.5rem; }
+    .payment-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .payment-option { border: 1px solid var(--fnaf-muted); margin: 0; padding: 1rem; }
+    .payment-option h3 { color: var(--fnaf-cyan); margin-bottom: .65rem; }
+    .payment-option button, select { margin-block: .5rem; max-width: 100%; }
+    .payment-option button:disabled { cursor: not-allowed; opacity: .55; }
+  `],
 })
 export class CheckoutComponent {
   carritoSvc = inject(CarritoService);

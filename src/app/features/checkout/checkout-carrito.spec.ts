@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, RouterLink } from '@angular/router';
+import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MsalService } from '@azure/msal-angular';
@@ -64,6 +65,18 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     expect(req.request.body).toEqual({ operacionId: 'op-1', metodo: 'SIMULADO', instrumentoPruebaId: 'sim-approved' });
     req.flush(payment('APPROVED', importe), { status: 201, statusText: 'Created' }); await turno();
   }
+
+  it('shows Webpay and simulation and keeps Webpay visible during a simulated payment', () => {
+    const fixture = create();
+    const webpay = fixture.debugElement.query(By.css('#btn-webpay'));
+    expect(webpay.injector.get(RouterLink).urlTree?.toString()).toBe('/checkout/webpay');
+    expect(webpay.nativeElement.disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('#btn-confirmar-pago')).not.toBeNull();
+
+    fixture.componentInstance.procesando = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#btn-webpay').disabled).toBe(true);
+  });
 
   it('waits for GET and POST, ignores duplicate click, and clears only after approved payment AND confirmation', async () => {
     const f = create();
