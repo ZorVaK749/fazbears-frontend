@@ -13,6 +13,7 @@ export interface ItemCarrito {
   nombreProducto: string;
   cantidad: number;
   precioUnitario: number;
+  precioVigente?: boolean;
 }
 
 export interface CarritoState { items: ItemCarrito[]; total: number; }
@@ -183,6 +184,9 @@ export class CarritoService {
       throw new Error('No se pudo sincronizar el carrito. Revísalo y actualízalo antes de confirmar.');
     }
     if (!this.carrito().items.length) throw new Error('El carrito está vacío.');
+    if (this.carrito().items.some(item => item.precioVigente === false)) {
+      throw new Error('Quita del carrito los productos sin precio vigente antes de pagar.');
+    }
     return { ...this.carrito(), items: this.carrito().items.map(item => ({ ...item })),
       usuarioId: sesion.identidad.usuarioId, tenantId: sesion.identidad.tenantId,
       emailUsuario: this.cuentaActual()?.username ?? '',
@@ -321,7 +325,8 @@ export class CarritoService {
       }
       productos.add(item.productoId);
       return { id: item.id, productoId: item.productoId, nombreProducto: item.nombreProducto,
-        cantidad: item.cantidad, precioUnitario: precio };
+        cantidad: item.cantidad, precioUnitario: precio,
+        ...(item.precioVigente === false ? { precioVigente: false } : {}) };
     });
     const total = items.reduce((suma, item) => suma + item.precioUnitario * item.cantidad, 0);
     if (!Number.isFinite(total)) throw new Error('Total incompatible');

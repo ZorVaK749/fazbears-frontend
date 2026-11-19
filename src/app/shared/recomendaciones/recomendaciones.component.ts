@@ -3,9 +3,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CarritoService, IdentidadSesion } from '../../core/services/carrito.service';
 import { RecomendacionesService, Recomendaciones, Recomendacion } from '../../core/services/recomendaciones.service';
 import { ProductoService } from '../../core/services/producto.service';
+import { ClpPipe } from '../clp.pipe';
 
 @Component({
   selector: 'app-recomendaciones', standalone: true,
+  imports: [ClpPipe],
   template: `
     <section aria-label="Recomendaciones">
       <h2 class="pixel text-neon-cyan">Recomendaciones</h2>
@@ -16,7 +18,7 @@ import { ProductoService } from '../../core/services/producto.service';
           @for (item of r.items; track item.productoId) {
             <article class="card-fnaf">
               <button class="btn-neon" (click)="ver(item)">{{ item.nombre }}</button>
-              <p>{{ item.categoria }} · {{ item.precio }} · {{ item.razon }}</p>
+              <p>{{ item.categoria }} · {{ item.precio | clp }} · {{ item.razon }}</p>
               <button class="btn-neon" (click)="seleccionar(item)">Añadir recomendado</button>
             </article>
           } @empty { <p>Sin recomendaciones disponibles; consulta el catálogo.</p> }

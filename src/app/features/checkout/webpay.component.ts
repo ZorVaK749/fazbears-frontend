@@ -5,6 +5,7 @@ import { firstValueFrom, timeout } from 'rxjs';
 import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
+import { ClpPipe } from '../../shared/clp.pipe';
 
 const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
 const PENDING = 'pedidos360.webpay.paymentId';
@@ -17,13 +18,16 @@ interface PagoWebpay {
 @Component({
   standalone: true,
   selector: 'app-webpay',
-  imports: [RouterLink],
+  imports: [RouterLink, ClpPipe],
   template: `
     <main>
       <h1>Webpay Plus de integración</h1>
       <p>Usa los datos de prueba oficiales de Transbank en su formulario de integración.</p>
       <p role="status">{{ mensaje() }}</p>
-      @if (pedido()) { <a routerLink="/pedidos">Ver pedido #{{ pedido() }}</a> }
+      @if (pedido()) {
+        <p>Total pagado en integración: {{ total() | clp }}</p>
+        <a routerLink="/pedidos">Ver pedido #{{ pedido() }}</a>
+      }
       @if (disponible() && !pedido()) {
         @if (retorno || pendiente()) {
           <button class="btn-neon" [disabled]="ocupado()" (click)="retomar()">Verificar el mismo pago</button>
@@ -48,6 +52,7 @@ export class WebpayComponent implements OnInit {
   readonly ocupado = signal(false);
   readonly disponible = signal(false);
   readonly pedido = signal<number | null>(null);
+  readonly total = signal<number | null>(null);
   readonly mensaje = signal('Comprobando disponibilidad…');
   readonly pendiente = signal(sessionStorage.getItem(PENDING));
   retorno?: Retorno;
@@ -102,7 +107,7 @@ export class WebpayComponent implements OnInit {
       form.remove();
     } catch (error) {
       this.mensaje.set(error instanceof HttpErrorResponse && error.status === 422
-        ? 'Webpay requiere una cotización en pesos enteros.'
+        ? 'La cotización contiene fracciones de peso. Vuelve al checkout y actualiza el carrito para cotizar de nuevo.'
         : 'Inicio sin confirmar. Reintenta desde esta pantalla para conservar la cotización y la clave.');
     } finally {
       this.ocupado.set(false);
@@ -129,6 +134,7 @@ export class WebpayComponent implements OnInit {
         }, `webpay-${pago.pagoId}`);
         if (!pedido.pedidoId || pedido.simulacion !== false || pedido.pagoId !== pago.pagoId
             || pedido.total !== pago.importe) throw new Error();
+        this.total.set(pedido.total);
         this.pedido.set(pedido.pedidoId);
         this.mensaje.set('Pago de integración verificado y pedido confirmado.');
         this.clear();

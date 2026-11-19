@@ -11,7 +11,7 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 @Component({
   selector: 'app-perfil',
   standalone: true,
-  imports: [NavbarComponent, RouterLink, FazcoinsComponent],
+  imports: [NavbarComponent, RouterLink, FazcoinsComponent, ClpPipe],
   template: `
     <app-navbar />
 
@@ -49,7 +49,7 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
           </div>
           <div class="stat-card">
             <span class="stat-icon">💰</span>
-            <div class="stat-val pixel text-neon-green">\${{ totalGastado.toFixed(2) }}</div>
+            <div class="stat-val pixel text-neon-green">{{ totalGastado | clp }}</div>
             <div class="stat-label">Total gastado</div>
           </div>
           <div class="stat-card">
@@ -237,3 +237,4 @@ export class PerfilComponent implements OnInit {
     });
   }
 }
+import { ClpPipe } from '../../shared/clp.pipe';

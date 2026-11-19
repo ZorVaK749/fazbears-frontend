@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CarritoService } from '../../core/services/carrito.service';
+import { ClpPipe } from '../../shared/clp.pipe';
 
 @Component({
   selector: 'app-carrito',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'carritoSvc.cerrarCarrito()' },
-  imports: [],
+  imports: [ClpPipe],
   template: `
     <!-- Overlay oscuro al abrir -->
     @if (carritoSvc.abierto()) {
@@ -48,7 +49,7 @@ import { CarritoService } from '../../core/services/carrito.service';
             <div class="item-info">
               <p class="item-nombre">{{ item.nombreProducto }}</p>
               <p class="item-precio pixel text-neon-green">
-                \${{ (item.precioUnitario * item.cantidad).toFixed(2) }}
+                {{ item.precioVigente === false ? 'Sin precio vigente' : (item.precioUnitario * item.cantidad | clp) }}
               </p>
             </div>
             <div class="item-controles">
@@ -67,7 +68,7 @@ import { CarritoService } from '../../core/services/carrito.service';
           <div class="total-row">
             <span class="pixel total-label">TOTAL:</span>
             <span class="pixel text-neon-green total-valor">
-              \${{ carritoSvc.carrito().total.toFixed(2) }}
+              {{ carritoSvc.carrito().total | clp }}
             </span>
           </div>
 

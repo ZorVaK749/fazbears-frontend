@@ -5,10 +5,11 @@ import { CarritoService, IdentidadSesion } from '../../core/services/carrito.ser
 import { InstrumentoPrueba, PagoService } from '../../core/services/pago.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
+import { ClpPipe } from '../../shared/clp.pipe';
 
 @Component({
   selector: 'app-checkout', standalone: true,
-  imports: [FormsModule, RouterLink, NavbarComponent, FazcoinsComponent],
+  imports: [FormsModule, RouterLink, NavbarComponent, FazcoinsComponent, ClpPipe],
   template: `
     <app-navbar />
     <main>
@@ -23,16 +24,18 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
       @if (pagoExitoso) {
         <section class="card-fnaf">
           <h2>Pago SIMULADO aprobado · pedido #{{ pedidoIdGenerado }} confirmado</h2>
-          <p>Total simulado: {{ montoPagado }}. Sin cargo real.</p>
+          <p>Total simulado: {{ montoPagado | clp }}. Sin cargo real.</p>
           <a routerLink="/pedidos" class="btn-neon">VER MIS PEDIDOS</a>
         </section>
       } @else {
         <section class="card-fnaf">
           <h2>Resumen del carrito</h2>
           @for (item of carritoSvc.carrito().items; track item.productoId) {
-            <p>{{ item.nombreProducto }} × {{ item.cantidad }} · {{ item.precioUnitario * item.cantidad }}</p>
+            <p>{{ item.nombreProducto }} × {{ item.cantidad }} ·
+              {{ item.precioVigente === false ? 'Sin precio vigente' : (item.precioUnitario * item.cantidad | clp) }}
+            </p>
           } @empty { <p>No hay productos para pagar.</p> }
-          <p>Total de referencia: {{ carritoSvc.carrito().total }}. El servidor cotiza el importe final.</p>
+          <p>Total de referencia: {{ carritoSvc.carrito().total | clp }}. El servidor cotiza el importe final.</p>
           <div class="payment-options">
             <section class="payment-option" aria-labelledby="webpay-heading">
               <h3 id="webpay-heading">Webpay Plus de integración</h3>

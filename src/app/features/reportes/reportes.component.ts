@@ -3,12 +3,13 @@ import { ReportesService, ResumenReporte } from '../../core/services/reportes.se
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
+import { ClpPipe } from '../../shared/clp.pipe';
 
 
 @Component({
   selector: 'app-reportes',
   standalone: true,
-  imports: [NavbarComponent, RouterLink],
+  imports: [NavbarComponent, RouterLink, ClpPipe],
   template: `
     <app-navbar />
 
@@ -40,12 +41,12 @@ import { Router } from '@angular/router';
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">💰</span>
-            <div class="kpi-valor pixel text-neon-green">\${{ resumen.ingresosTotales.toFixed(2) }}</div>
+            <div class="kpi-valor pixel text-neon-green">{{ resumen.ingresosTotales | clp }}</div>
             <div class="kpi-label">INGRESOS TOTALES</div>
           </div>
           <div class="kpi-card">
             <span class="kpi-icon">⏳</span>
-            <div class="kpi-valor pixel text-neon-yellow">\${{ resumen.promedioPerPedido.toFixed(2) }}</div>
+            <div class="kpi-valor pixel text-neon-yellow">{{ resumen.promedioPerPedido | clp }}</div>
             <div class="kpi-label">PROMEDIO POR PEDIDO</div>
           </div>
           <div class="kpi-card">
@@ -71,7 +72,7 @@ import { Router } from '@angular/router';
                     <tr>
                       <td class="pixel text-neon-yellow">#{{ venta.pedidoId }}</td>
                       <td>{{ formatDay(venta.fechaCreacion) }}</td>
-                      <td class="pixel text-neon-green">\${{ venta.total.toFixed(2) }}</td>
+                      <td class="pixel text-neon-green">{{ venta.total | clp }}</td>
                     </tr>
                   }
                 </tbody>

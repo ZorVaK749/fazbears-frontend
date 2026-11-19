@@ -17,7 +17,7 @@ interface CategoriaTab {
 @Component({
   selector: 'app-catalogo',
   standalone: true,
-  imports: [NavbarComponent, RecomendacionesComponent],
+  imports: [NavbarComponent, RecomendacionesComponent, ClpPipe],
   template: `
     <app-navbar />
 
@@ -72,7 +72,7 @@ interface CategoriaTab {
                 <p class="producto-desc">{{ producto.descripcion }}</p>
                 <div class="producto-footer">
                   <span class="producto-precio pixel text-neon-green">
-                    {{ '$' + producto.precio }}
+                    {{ producto.precio | clp }}
                   </span>
                   <button class="btn-neon btn-neon-cyan btn-add"
                     (click)="agregar(producto)">
@@ -232,3 +232,4 @@ export class CatalogoComponent implements OnInit {
     return map[cat] ?? '📦';
   }
 }
+import { ClpPipe } from '../../shared/clp.pipe';

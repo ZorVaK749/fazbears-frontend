@@ -9,7 +9,7 @@ import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [NavbarComponent, CarritoComponent, RouterLink, SlicePipe],
+  imports: [NavbarComponent, CarritoComponent, RouterLink, SlicePipe, ClpPipe],
   template: `
     <app-navbar />
 
@@ -74,7 +74,7 @@ import { MisPedidosService } from '../../core/services/mis-pedidos.service';
                       <span class="item-tag">{{ item.nombreProducto }} x{{ item.cantidad }}</span>
                     }
                   </td>
-                  <td class="pixel text-neon-green total-cell">\${{ pedido.total?.toFixed(2) }}</td>
+                  <td class="pixel text-neon-green total-cell">{{ pedido.total | clp }}</td>
                   <td>
                     <span class="estado-badge pixel" [class]="badgeClass(pedido.estado)">
                       {{ pedido.estado }}
@@ -208,3 +208,4 @@ export class OrdersComponent implements OnInit {
     return `badge-${estado ?? 'PENDIENTE'}`;
   }
 }
+import { ClpPipe } from '../../shared/clp.pipe';
