@@ -21,24 +21,38 @@ interface PagoWebpay {
   imports: [RouterLink, ClpPipe],
   template: `
     <main>
-      <h1>Webpay Plus de integración</h1>
-      <p>Usa los datos de prueba oficiales de Transbank en su formulario de integración.</p>
-      <p role="status">{{ mensaje() }}</p>
-      @if (pedido()) {
-        <p>Total pagado en integración: {{ total() | clp }}</p>
-        <a routerLink="/pedidos">Ver pedido #{{ pedido() }}</a>
+      @if (pedido(); as pedidoId) {
+        <section class="card-fnaf receipt" aria-labelledby="webpay-receipt" aria-live="polite">
+          <h1 id="webpay-receipt" class="pixel text-neon-cyan">Pago efectuado</h1>
+          <p>Webpay de integración verificó el pago y se confirmó el pedido #{{ pedidoId }}.</p>
+          <p>Total pagado en integración: <strong>{{ total() | clp }}</strong></p>
+          <div class="actions">
+            <a class="btn-neon btn-neon-cyan" routerLink="/checkout">Volver al checkout</a>
+            <a class="btn-neon" routerLink="/pedidos">Ver mis pedidos</a>
+          </div>
+        </section>
+      } @else {
+        <h1>Webpay Plus de integración</h1>
+        <p>Usa los datos de prueba oficiales de Transbank en su formulario de integración.</p>
+        <p role="status">{{ mensaje() }}</p>
+        <div class="actions">
+          @if (disponible() && !cerrado()) {
+            @if (retorno || pendiente()) {
+              <button class="btn-neon" [disabled]="ocupado()" (click)="retomar()">Verificar el mismo pago</button>
+            } @else {
+              <button class="btn-neon" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
+            }
+          }
+          <a routerLink="/checkout">Volver al checkout</a>
+        </div>
       }
-      @if (disponible() && !pedido()) {
-        @if (retorno || pendiente()) {
-          <button class="btn-neon" [disabled]="ocupado()" (click)="retomar()">Verificar el mismo pago</button>
-        } @else {
-          <button class="btn-neon" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
-        }
-      }
-      <a routerLink="/checkout">Volver al checkout</a>
     </main>
   `,
-  styles: [`main { max-width: 780px; margin: auto; padding: 2rem; } a, button { margin: .75rem; }`],
+  styles: [`
+    main { max-width: 780px; margin: auto; padding: 2rem; }
+    .receipt { padding: clamp(1rem, 5vw, 2rem); }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+  `],
 })
 export class WebpayComponent implements OnInit {
   private readonly http = inject(HttpClient);
@@ -53,6 +67,7 @@ export class WebpayComponent implements OnInit {
   readonly disponible = signal(false);
   readonly pedido = signal<number | null>(null);
   readonly total = signal<number | null>(null);
+  readonly cerrado = signal(false);
   readonly mensaje = signal('Comprobando disponibilidad…');
   readonly pendiente = signal(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT));
   retorno?: Retorno;
@@ -81,7 +96,7 @@ export class WebpayComponent implements OnInit {
   }
 
   async iniciar() {
-    if (this.ocupado() || this.pendiente() || this.retorno) return;
+    if (this.ocupado() || this.pendiente() || this.retorno || this.cerrado()) return;
     this.ocupado.set(true);
     try {
       const snapshot = await this.cart.prepararCheckout();
@@ -132,6 +147,7 @@ export class WebpayComponent implements OnInit {
           || (id && pago.pagoId !== id)) throw new Error();
       if (pago.estado === 'DECLINED') {
         this.mensaje.set('Transbank cerró este intento sin pago confirmado. Puedes volver al checkout.');
+        this.cerrado.set(true);
         this.clear();
         return;
       }
@@ -143,11 +159,11 @@ export class WebpayComponent implements OnInit {
         const pedido = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
           pagoId: pago.pagoId, operacionId: pago.operacionId,
         }, `webpay-${pago.pagoId}`);
-        if (!pedido.pedidoId || pedido.simulacion !== false || pedido.pagoId !== pago.pagoId
+        if (this.destroy.destroyed) return;
+        if (!Number.isSafeInteger(pedido.pedidoId) || pedido.pedidoId < 1 || pedido.simulacion !== false || pedido.pagoId !== pago.pagoId
             || pedido.total !== pago.importe) throw new Error();
         this.total.set(pedido.total);
         this.pedido.set(pedido.pedidoId);
-        this.mensaje.set('Pago de integración verificado y pedido confirmado.');
         this.clear();
       } else {
         this.mensaje.set(retorno && !retorno.tokenWs

@@ -42,9 +42,15 @@ describe('Webpay integration return', () => {
     await Promise.resolve();
     const confirm = http.expectOne('/api/orden/confirmar-pago');
     expect(confirm.request.headers.get('Idempotency-Key')).toBe(`webpay-${paymentId}`);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
     confirm.flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
     await Promise.resolve();
+    fixture.detectChanges();
     expect(fixture.componentInstance.pedido()).toBe(31);
+    expect(fixture.nativeElement.querySelector('#webpay-receipt').textContent).toContain('Pago efectuado');
+    expect(fixture.nativeElement.querySelector('.receipt').textContent).toContain('pedido #31');
+    expect(fixture.nativeElement.querySelector('.receipt a[href="/checkout"]').textContent).toContain('Volver al checkout');
     expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
     http.verify();
   });
@@ -78,6 +84,18 @@ describe('Webpay integration return', () => {
     await retry;
     expect(resumed.componentInstance.pedido()).toBe(31);
     http.expectNone('/api/pagos/webpay');
+    http.verify();
+  });
+
+  it('keeps the same payment blocked when the provider still reports a pending attempt', async () => {
+    const { fixture, http } = setup();
+    http.expectOne('/api/pagos/webpay/retorno').flush({ ...pagoAprobado, estado: 'PENDING' });
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button').textContent).toContain('Verificar el mismo pago');
+    expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBe(paymentId);
+    http.expectNone('/api/orden/confirmar-pago');
     http.verify();
   });
 });
