@@ -1,5 +1,6 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { JsonPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DestroyRef } from '@angular/core';
@@ -15,14 +16,14 @@ import { FidelizacionService, Saldo, Movimiento, Recompensa } from '../../core/s
       @if (vigente()) {
         @if (saldo()) {
           <p>Saldo: {{ saldo()!.saldo }} Fz · Disponible: {{ saldo()!.disponible }} Fz · Deuda: {{ saldo()!.deuda }} Fz</p>
+          @for (r of recompensas(); track r.id) {
+            <button class="btn-neon" [disabled]="ocupado()" (click)="canjear(r.id)">Canjear {{ r.nombre }} · {{ r.costo }} Fz</button>
+          }
+          <h3>Movimientos</h3>
+          @for (m of movimientos(); track $index) { <pre>{{ m | json }}</pre> }
+          @empty { <p>Sin movimientos registrados.</p> }
         }
-        @for (r of recompensas(); track r.id) {
-          <button class="btn-neon" [disabled]="ocupado()" (click)="canjear(r.id)">Canjear {{ r.nombre }} · {{ r.costo }} Fz</button>
-        }
-        <h3>Movimientos</h3>
-        @for (m of movimientos(); track $index) { <pre>{{ m | json }}</pre> }
-        @empty { <p>Sin movimientos registrados.</p> }
-        @if (mensaje()) { <p role="status">{{ mensaje() }}</p> }
+        @if (mensajeCarga() || mensaje()) { <p role="status">{{ mensajeCarga() || mensaje() }}</p> }
       }
       <button class="btn-neon" [disabled]="ocupado()" (click)="cargar()">Actualizar FazCoins</button>
     </section>
@@ -38,12 +39,14 @@ export class FazcoinsComponent {
   movimientos = signal<Movimiento[]>([]);
   recompensas = signal<Recompensa[]>([]);
   mensaje = signal('');
+  mensajeCarga = signal('');
   ocupado = signal(false);
   constructor() {
     effect(() => {
       const identidad = this.carrito.identidadVerificada();
       this.identidad = identidad ?? undefined;
-      this.saldo.set(null); this.movimientos.set([]); this.recompensas.set([]); this.mensaje.set('');
+      this.saldo.set(null); this.movimientos.set([]); this.recompensas.set([]);
+      this.mensaje.set(''); this.mensajeCarga.set('');
       if (identidad && this.carrito.esIdentidadActual(identidad)) this.cargar();
     });
     void this.carrito.inicializar();
@@ -52,12 +55,21 @@ export class FazcoinsComponent {
   cargar() {
     const identidad = this.identidad;
     if (!identidad || !this.carrito.esIdentidadActual(identidad)) return;
+    this.mensajeCarga.set('');
     forkJoin({ saldo: this.svc.saldo(), movimientos: this.svc.movimientos(), recompensas: this.svc.recompensas() })
       .pipe(takeUntilDestroyed(this.destroy)).subscribe({
         next: data => {
           if (!this.carrito.esIdentidadActual(identidad)) return;
           this.saldo.set(data.saldo); this.movimientos.set(data.movimientos); this.recompensas.set(data.recompensas);
-        }, error: () => { if (this.carrito.esIdentidadActual(identidad)) this.mensaje.set('No se pudo cargar FazCoins. Actualiza para reintentar.'); },
+        }, error: (error: unknown) => {
+          if (!this.carrito.esIdentidadActual(identidad)) return;
+          if (error instanceof HttpErrorResponse && error.status === 404) {
+            this.saldo.set(null); this.movimientos.set([]); this.recompensas.set([]);
+            this.mensajeCarga.set('FazCoins no está disponible en este entorno.');
+          } else {
+            this.mensajeCarga.set('No se pudo cargar FazCoins. Actualiza para reintentar.');
+          }
+        },
       });
   }
   async canjear(id: string) {

@@ -6,9 +6,9 @@ import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
 import { ClpPipe } from '../../shared/clp.pipe';
+import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
 
 const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
-const PENDING = 'pedidos360.webpay.paymentId';
 interface Retorno { tokenWs: string | null; tbkToken: string | null; buyOrder: string | null; sessionId: string | null; }
 interface PagoWebpay {
   pagoId: string; operacionId: string; estado: string; importe: number;
@@ -54,7 +54,7 @@ export class WebpayComponent implements OnInit {
   readonly pedido = signal<number | null>(null);
   readonly total = signal<number | null>(null);
   readonly mensaje = signal('Comprobando disponibilidad…');
-  readonly pendiente = signal(sessionStorage.getItem(PENDING));
+  readonly pendiente = signal(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT));
   retorno?: Retorno;
 
   async ngOnInit() {
@@ -65,19 +65,23 @@ export class WebpayComponent implements OnInit {
       this.retorno = fields;
       window.history.replaceState(window.history.state, '', window.location.pathname);
     }
+    if (this.retorno || this.pendiente()) {
+      this.disponible.set(true);
+      await this.retomar();
+      return;
+    }
     try {
       await firstValueFrom(this.http.get(`${this.api}/pagos/webpay/capacidad`).pipe(timeout(5000)));
       if (this.destroy.destroyed) return;
       this.disponible.set(true);
-      if (this.retorno || this.pendiente()) await this.retomar();
-      else this.mensaje.set('El servidor cotiza el carrito antes de abrir Transbank.');
+      this.mensaje.set('El servidor cotiza el carrito antes de abrir Transbank.');
     } catch {
       this.mensaje.set('Webpay de integración no está disponible en este entorno.');
     }
   }
 
   async iniciar() {
-    if (this.ocupado() || this.pendiente()) return;
+    if (this.ocupado() || this.pendiente() || this.retorno) return;
     this.ocupado.set(true);
     try {
       const snapshot = await this.cart.prepararCheckout();
@@ -92,7 +96,7 @@ export class WebpayComponent implements OnInit {
       }, this.paymentKey);
       if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot) || redirect.url !== FORM
           || !/^[A-Za-z0-9]{20,128}$/.test(redirect.token)) throw new Error();
-      sessionStorage.setItem(PENDING, redirect.pagoId);
+      sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, redirect.pagoId);
       this.pendiente.set(redirect.pagoId);
       const form = document.createElement('form');
       form.action = FORM;
@@ -115,20 +119,27 @@ export class WebpayComponent implements OnInit {
   }
 
   async retomar() {
-    if (this.ocupado()) return;
+    const id = this.pendiente();
+    const retorno = this.retorno;
+    if (this.ocupado() || (!retorno && !id)) return;
     this.ocupado.set(true);
+    let aprobado = false;
     try {
-      const id = this.pendiente();
-      const pago = this.retorno
-        ? await this.post<PagoWebpay>('/pagos/webpay/retorno', this.retorno)
-        : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id ?? '')}/estado`, {});
-      if (this.destroy.destroyed || pago.simulacion !== false || pago.moneda !== 'CLP') throw new Error();
+      const pago = retorno
+        ? await this.post<PagoWebpay>('/pagos/webpay/retorno', retorno)
+        : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id!)}/estado`, {});
+      if (this.destroy.destroyed || pago.simulacion !== false || pago.moneda !== 'CLP'
+          || (id && pago.pagoId !== id)) throw new Error();
       if (pago.estado === 'DECLINED') {
-        this.mensaje.set('Transbank rechazó el pago. Puedes iniciar una nueva cotización al regresar al checkout.');
+        this.mensaje.set('Transbank cerró este intento sin pago confirmado. Puedes volver al checkout.');
         this.clear();
-      } else if (pago.estado === 'APPROVED') {
-        sessionStorage.setItem(PENDING, pago.pagoId);
-        this.pendiente.set(pago.pagoId);
+        return;
+      }
+      this.retorno = undefined;
+      sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, pago.pagoId);
+      this.pendiente.set(pago.pagoId);
+      if (pago.estado === 'APPROVED') {
+        aprobado = true;
         const pedido = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
           pagoId: pago.pagoId, operacionId: pago.operacionId,
         }, `webpay-${pago.pagoId}`);
@@ -139,12 +150,14 @@ export class WebpayComponent implements OnInit {
         this.mensaje.set('Pago de integración verificado y pedido confirmado.');
         this.clear();
       } else {
-        this.mensaje.set(this.retorno && !this.retorno.tokenWs
+        this.mensaje.set(retorno && !retorno.tokenWs
           ? 'Transbank devolvió una cancelación o expiración. La transacción no está aprobada.'
           : 'Pago sin aprobación confirmada. Verifica el mismo pago antes de iniciar otro.');
       }
     } catch {
-      this.mensaje.set('Verificación pendiente. Reintenta desde esta pantalla con la cuenta que inició el pago.');
+      this.mensaje.set(aprobado
+        ? 'Pago aprobado. Falta confirmar el pedido. Usa Verificar el mismo pago.'
+        : 'Verificación pendiente. Reintenta desde esta pantalla con la cuenta que inició el pago.');
     } finally {
       this.ocupado.set(false);
     }
@@ -153,7 +166,7 @@ export class WebpayComponent implements OnInit {
   private clear() {
     this.retorno = undefined;
     this.pendiente.set(null);
-    sessionStorage.removeItem(PENDING);
+    sessionStorage.removeItem(WEBPAY_PENDING_PAYMENT);
   }
 
   private post<T>(path: string, body: unknown, key?: string): Promise<T> {

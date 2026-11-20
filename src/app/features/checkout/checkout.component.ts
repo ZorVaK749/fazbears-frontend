@@ -6,6 +6,7 @@ import { InstrumentoPrueba, PagoService } from '../../core/services/pago.service
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 import { ClpPipe } from '../../shared/clp.pipe';
+import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
 
 @Component({
   selector: 'app-checkout', standalone: true,
@@ -41,24 +42,25 @@ import { ClpPipe } from '../../shared/clp.pipe';
               <h3 id="webpay-heading">Webpay Plus de integración</h3>
               <p>Paga con una tarjeta de prueba en Transbank. La cotización debe estar en pesos enteros.</p>
               <button id="btn-webpay" type="button" class="btn-neon btn-neon-cyan"
-                      [disabled]="procesando || pagoSvc.pendiente()"
-                      routerLink="/checkout/webpay">CONTINUAR CON WEBPAY</button>
-              @if (procesando || pagoSvc.pendiente()) {
+                      [disabled]="procesando || (!webpayPendiente && pagoSvc.pendiente())"
+                      routerLink="/checkout/webpay">{{ webpayPendiente ? 'VERIFICAR PAGO WEBPAY' : 'CONTINUAR CON WEBPAY' }}</button>
+              @if (procesando || (!webpayPendiente && pagoSvc.pendiente())) {
                 <p role="status">Resuelve primero el pago simulado de esta sesión.</p>
               }
             </section>
             <section class="payment-option" aria-labelledby="simulation-heading">
               <h3 id="simulation-heading">Pago simulado</h3>
+              @if (webpayPendiente) { <p role="status">Verifica el pago Webpay pendiente antes de iniciar otro pago.</p> }
               <label for="instrumento">Instrumento de simulación</label>
-              <select id="instrumento" [(ngModel)]="instrumento" [disabled]="procesando || pagoSvc.pendiente()">
+              <select id="instrumento" [(ngModel)]="instrumento" [disabled]="procesando || pagoSvc.pendiente() || webpayPendiente">
                 <option value="sim-approved">sim-approved · aprobación de prueba</option>
                 <option value="sim-declined">sim-declined · rechazo de prueba</option>
               </select>
               <p>El reintento conserva la cotización y el instrumento original.</p>
-              <button id="btn-confirmar-pago" class="btn-neon" [disabled]="procesando" (click)="procesarPago()">
+              <button id="btn-confirmar-pago" class="btn-neon" [disabled]="procesando || webpayPendiente" (click)="procesarPago()">
                 {{ procesando ? 'PROCESANDO…' : pagoSvc.pendiente() ? 'REINTENTAR MISMA OPERACIÓN' : 'CONFIRMAR PAGO SIMULADO' }}
               </button>
-              <button class="btn-neon" [disabled]="procesando" (click)="nuevoIntento()">Nuevo intento tras rechazo o bloqueo</button>
+              <button class="btn-neon" [disabled]="procesando || webpayPendiente" (click)="nuevoIntento()">Nuevo intento tras rechazo o bloqueo</button>
             </section>
           </div>
         </section>
@@ -82,6 +84,7 @@ import { ClpPipe } from '../../shared/clp.pipe';
 export class CheckoutComponent {
   carritoSvc = inject(CarritoService);
   pagoSvc = inject(PagoService);
+  readonly webpayPendiente = Boolean(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT));
   private cdr = inject(ChangeDetectorRef);
   private destroyRef = inject(DestroyRef);
   instrumento: InstrumentoPrueba = 'sim-approved';
@@ -94,7 +97,7 @@ export class CheckoutComponent {
   errorMsg = '';
   nuevoIntento() { this.pagoSvc.nuevoIntento(); this.errorMsg = ''; }
   async procesarPago() {
-    if (this.procesando || this.pagoExitoso) return;
+    if (this.procesando || this.pagoExitoso || this.webpayPendiente) return;
     this.procesando = true; this.errorMsg = '';
     try {
       const res = await this.pagoSvc.procesar(this.instrumento, () => !this.destroyRef.destroyed);
