@@ -145,8 +145,10 @@ export class WebpayComponent implements OnInit {
         : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id!)}/estado`, {});
       if (this.destroy.destroyed || pago.simulacion !== false || pago.moneda !== 'CLP'
           || (id && pago.pagoId !== id)) throw new Error();
-      if (pago.estado === 'DECLINED') {
-        this.mensaje.set('Transbank cerró este intento sin pago confirmado. Puedes volver al checkout.');
+      if (pago.estado === 'DECLINED' || pago.estado === 'EXPIRED') {
+        this.mensaje.set(pago.estado === 'EXPIRED'
+          ? 'Este intento de Webpay venció sin pago confirmado. Vuelve al checkout para obtener una nueva cotización.'
+          : 'Transbank cerró este intento sin pago confirmado. Puedes volver al checkout.');
         this.cerrado.set(true);
         this.clear();
         return;

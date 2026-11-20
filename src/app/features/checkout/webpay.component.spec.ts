@@ -98,4 +98,20 @@ describe('Webpay integration return', () => {
     http.expectNone('/api/orden/confirmar-pago');
     http.verify();
   });
+
+  it('allows returning to checkout after server expiration without starting a second charge', async () => {
+    sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, paymentId);
+    const { fixture, http } = setup();
+    http.expectOne('/api/pagos/webpay/retorno').flush({ ...pagoAprobado, estado: 'EXPIRED' });
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/checkout"]').textContent).toContain('Volver al checkout');
+    expect(fixture.componentInstance.mensaje()).toContain('venció');
+    expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
+    http.expectNone('/api/orden/confirmar-pago');
+    http.expectNone('/api/pagos/webpay');
+    http.verify();
+  });
 });
