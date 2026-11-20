@@ -114,8 +114,14 @@ export class PagoService {
   }
 
   /** Only a definitive decline/block may start another attempt; never discard an uncertain write. */
+  puedeNuevoIntento(): boolean {
+    const f = this.flujo;
+    return !this.ocupado && !!f && this.carrito.mismaSesion(f.snapshot)
+      && (f.pago?.estado === 'DECLINED' || f.pago?.estado === 'BLOCKED');
+  }
+
   nuevoIntento(): void {
-    if (!this.ocupado && this.flujo?.pago && this.flujo.pago.estado !== 'APPROVED') this.flujo = undefined;
+    if (this.puedeNuevoIntento()) this.flujo = undefined;
   }
 
   private post<T>(ruta: string, body: unknown, clave: string): Promise<T> {

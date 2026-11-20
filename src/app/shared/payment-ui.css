@@ -1,0 +1,40 @@
+.payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-block-start: 1rem;
+}
+
+.payment-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 2.75rem;
+  max-inline-size: 100%;
+  padding: .55rem 1rem;
+  border: 1px solid var(--fnaf-purple);
+  border-radius: .25rem;
+  background: var(--fnaf-surface2);
+  color: var(--fnaf-text);
+  font: 600 1rem/1.2 var(--font-body);
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.payment-action--primary {
+  border-color: var(--fnaf-cyan);
+  background: var(--fnaf-cyan);
+  color: var(--fnaf-bg);
+  font-weight: 700;
+}
+
+.payment-action:hover:not(:disabled) { filter: brightness(1.15); }
+.payment-action:focus-visible { outline: 2px solid var(--fnaf-yellow); outline-offset: 3px; }
+.payment-action:disabled { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 30rem) {
+  .payment-actions > .payment-action { inline-size: 100%; }
+}

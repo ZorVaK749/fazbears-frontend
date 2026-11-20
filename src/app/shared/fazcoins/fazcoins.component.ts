@@ -10,25 +10,35 @@ import { FidelizacionService, Saldo, Movimiento, Recompensa } from '../../core/s
 @Component({
   selector: 'app-fazcoins', standalone: true, imports: [JsonPipe],
   template: `
-    <section class="card-fnaf" aria-label="FazCoins">
+    <section aria-label="FazCoins">
       <h2 class="pixel text-neon-yellow">FazCoins · recompensas digitales</h2>
       <p>Simulación de fidelización. Los canjes no son pagos ni descuentan el precio del pedido.</p>
       @if (vigente()) {
         @if (saldo()) {
           <p>Saldo: {{ saldo()!.saldo }} Fz · Disponible: {{ saldo()!.disponible }} Fz · Deuda: {{ saldo()!.deuda }} Fz</p>
-          @for (r of recompensas(); track r.id) {
-            <button class="btn-neon" [disabled]="ocupado()" (click)="canjear(r.id)">Canjear {{ r.nombre }} · {{ r.costo }} Fz</button>
-          }
+          <div class="payment-actions">
+            @for (r of recompensas(); track r.id) {
+              <button type="button" class="payment-action" [disabled]="ocupado()" (click)="canjear(r.id)">Canjear {{ r.nombre }} · {{ r.costo }} Fz</button>
+            }
+          </div>
           <h3>Movimientos</h3>
           @for (m of movimientos(); track $index) { <pre>{{ m | json }}</pre> }
           @empty { <p>Sin movimientos registrados.</p> }
         }
         @if (mensajeCarga() || mensaje()) { <p role="status">{{ mensajeCarga() || mensaje() }}</p> }
       }
-      <button class="btn-neon" [disabled]="ocupado()" (click)="cargar()">Actualizar FazCoins</button>
+      <div class="payment-actions">
+        <button type="button" class="payment-action" [disabled]="ocupado()" (click)="cargar()">Actualizar FazCoins</button>
+      </div>
     </section>
   `,
-  styles: [`section { padding: 1.5rem; margin: 1rem 0; } h2 { font-size: 1rem; } pre { white-space: pre-wrap; overflow-wrap: anywhere; } button { margin: .4rem; }`],
+  styleUrl: '../payment-ui.css',
+  styles: [`
+    section { padding: clamp(1rem, 4vw, 1.5rem); margin-block: 1rem; background: var(--fnaf-surface); border: 1px solid var(--fnaf-border); border-radius: .375rem; }
+    h2 { margin-bottom: .35rem; font-size: 1.35rem; }
+    h3 { margin-top: .75rem; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  `],
 })
 export class FazcoinsComponent {
   private svc = inject(FidelizacionService);

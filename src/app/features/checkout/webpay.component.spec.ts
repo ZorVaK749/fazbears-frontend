@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { vi } from 'vitest';
 import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { WebpayComponent } from './webpay.component';
@@ -10,7 +11,12 @@ import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
 describe('Webpay integration return', () => {
   const paymentId = '42ff2362-6631-4a0b-9ba2-07d1193fa61d';
 
-  afterEach(() => sessionStorage.removeItem(WEBPAY_PENDING_PAYMENT));
+  afterEach(() => {
+    vi.useRealTimers();
+    sessionStorage.removeItem(WEBPAY_PENDING_PAYMENT);
+  });
+
+  const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
   function setup() {
     const snapshot = { queryParamMap: convertToParamMap({ token_ws: 'provider-reference-for-test' }) };
@@ -38,18 +44,19 @@ describe('Webpay integration return', () => {
     const verify = http.expectOne('/api/pagos/webpay/retorno');
     expect(verify.request.body.tokenWs).toBe('provider-reference-for-test');
     http.expectNone('/api/orden/confirmar-pago');
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Verificando pago');
     verify.flush(pagoAprobado);
-    await Promise.resolve();
+    await turno();
     const confirm = http.expectOne('/api/orden/confirmar-pago');
     expect(confirm.request.headers.get('Idempotency-Key')).toBe(`webpay-${paymentId}`);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
     confirm.flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
-    await Promise.resolve();
+    await turno();
     fixture.detectChanges();
     expect(fixture.componentInstance.pedido()).toBe(31);
     expect(fixture.nativeElement.querySelector('#webpay-receipt').textContent).toContain('Pago efectuado');
-    expect(fixture.nativeElement.querySelector('.receipt').textContent).toContain('pedido #31');
+    expect(fixture.nativeElement.querySelector('.receipt').textContent).toContain('Pedido #31');
     expect(fixture.nativeElement.querySelector('.receipt a[href="/checkout"]').textContent).toContain('Volver al checkout');
     expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
     http.verify();
@@ -60,7 +67,7 @@ describe('Webpay integration return', () => {
     const { fixture, http, snapshot } = setup();
     http.expectOne('/api/pagos/webpay/retorno').flush({ code: 'WEBPAY_STATUS_UNAVAILABLE' },
       { status: 503, statusText: 'Unavailable' });
-    await Promise.resolve();
+    await turno();
     expect(fixture.componentInstance.pendiente()).toBe(paymentId);
     fixture.destroy();
     snapshot.queryParamMap = convertToParamMap({});
@@ -69,15 +76,15 @@ describe('Webpay integration return', () => {
     resumed.detectChanges();
     const estadoUrl = `/api/pagos/webpay/${paymentId}/estado`;
     http.expectOne(estadoUrl).flush(pagoAprobado);
-    await Promise.resolve();
+    await turno();
     const first = http.expectOne('/api/orden/confirmar-pago');
     first.flush(null, { status: 503, statusText: 'Unavailable' });
-    await Promise.resolve();
+    await turno();
     expect(resumed.componentInstance.mensaje()).toContain('Falta confirmar el pedido');
 
     const retry = resumed.componentInstance.retomar();
     http.expectOne(estadoUrl).flush(pagoAprobado);
-    await Promise.resolve();
+    await turno();
     const confirm = http.expectOne('/api/orden/confirmar-pago');
     expect(confirm.request.headers.get('Idempotency-Key')).toBe(first.request.headers.get('Idempotency-Key'));
     confirm.flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
@@ -87,10 +94,39 @@ describe('Webpay integration return', () => {
     http.verify();
   });
 
-  it('keeps the same payment blocked when the provider still reports a pending attempt', async () => {
+  it('automatically confirms the same payment after an initially pending return', async () => {
+    vi.useFakeTimers();
     const { fixture, http } = setup();
     http.expectOne('/api/pagos/webpay/retorno').flush({ ...pagoAprobado, estado: 'PENDING' });
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Verificando pago');
+    http.expectNone('/api/orden/confirmar-pago');
+    http.expectNone(`/api/pagos/webpay/${paymentId}/estado`);
+
+    await vi.advanceTimersByTimeAsync(500);
+    http.expectOne(`/api/pagos/webpay/${paymentId}/estado`).flush(pagoAprobado);
+    await vi.advanceTimersByTimeAsync(0);
+    const confirm = http.expectOne('/api/orden/confirmar-pago');
+    expect(confirm.request.body).toEqual({ pagoId: paymentId, operacionId: 'op-1' });
+    confirm.flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#webpay-receipt').textContent).toContain('Pago efectuado');
+    http.expectNone('/api/pagos/webpay');
+    http.verify();
+  });
+
+  it('offers a manual check after three automatic checks of a still-pending attempt', async () => {
+    vi.useFakeTimers();
+    const { fixture, http } = setup();
+    const pendiente = { ...pagoAprobado, estado: 'PENDING' };
+    http.expectOne('/api/pagos/webpay/retorno').flush(pendiente);
+    for (const delay of [1500, 3000, 5000]) {
+      await vi.advanceTimersByTimeAsync(delay);
+      http.expectOne(`/api/pagos/webpay/${paymentId}/estado`).flush(pendiente);
+    }
+    await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
     expect(fixture.nativeElement.querySelector('button').textContent).toContain('Verificar el mismo pago');
@@ -103,7 +139,7 @@ describe('Webpay integration return', () => {
     sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, paymentId);
     const { fixture, http } = setup();
     http.expectOne('/api/pagos/webpay/retorno').flush({ ...pagoAprobado, estado: 'EXPIRED' });
-    await Promise.resolve();
+    await turno();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();

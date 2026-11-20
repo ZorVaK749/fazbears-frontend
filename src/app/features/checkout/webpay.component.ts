@@ -1,7 +1,8 @@
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { firstValueFrom, timeout } from 'rxjs';
+import { TimeoutError, firstValueFrom, timeout, timer } from 'rxjs';
 import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
@@ -9,6 +10,7 @@ import { ClpPipe } from '../../shared/clp.pipe';
 import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
 
 const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
+const RECHECK_DELAYS_MS = [1500, 3000, 5000];
 interface Retorno { tokenWs: string | null; tbkToken: string | null; buyOrder: string | null; sessionId: string | null; }
 interface PagoWebpay {
   pagoId: string; operacionId: string; estado: string; importe: number;
@@ -22,36 +24,41 @@ interface PagoWebpay {
   template: `
     <main>
       @if (pedido(); as pedidoId) {
-        <section class="card-fnaf receipt" aria-labelledby="webpay-receipt" aria-live="polite">
+        <section class="payment-panel receipt" aria-labelledby="webpay-receipt" aria-live="polite">
           <h1 id="webpay-receipt" class="pixel text-neon-cyan">Pago efectuado</h1>
-          <p>Webpay de integración verificó el pago y se confirmó el pedido #{{ pedidoId }}.</p>
-          <p>Total pagado en integración: <strong>{{ total() | clp }}</strong></p>
-          <div class="actions">
-            <a class="btn-neon btn-neon-cyan" routerLink="/checkout">Volver al checkout</a>
-            <a class="btn-neon" routerLink="/pedidos">Ver mis pedidos</a>
+          <p>Pedido #{{ pedidoId }} confirmado por Webpay de integración.</p>
+          <dl class="receipt-total"><dt>Total pagado</dt><dd>{{ total() | clp }}</dd></dl>
+          <div class="payment-actions">
+            <a class="payment-action payment-action--primary" routerLink="/checkout">Volver al checkout</a>
+            <a class="payment-action" routerLink="/pedidos">Ver mis pedidos</a>
           </div>
         </section>
       } @else {
-        <h1>Webpay Plus de integración</h1>
-        <p>Usa los datos de prueba oficiales de Transbank en su formulario de integración.</p>
-        <p role="status">{{ mensaje() }}</p>
-        <div class="actions">
-          @if (disponible() && !cerrado()) {
-            @if (retorno || pendiente()) {
-              <button class="btn-neon" [disabled]="ocupado()" (click)="retomar()">Verificar el mismo pago</button>
-            } @else {
-              <button class="btn-neon" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
+        <section class="payment-panel" aria-labelledby="webpay-status">
+          <h1 id="webpay-status">{{ verificando() ? 'Verificando pago' : 'Webpay Plus de integración' }}</h1>
+          <p role="status" aria-live="polite" class="payment-message">{{ mensaje() }}</p>
+          <div class="payment-actions">
+            @if (disponible() && !cerrado() && !verificando()) {
+              @if (retorno || pendiente()) {
+                <button type="button" class="payment-action payment-action--primary" (click)="retomar()">Verificar el mismo pago</button>
+              } @else {
+                <button type="button" class="payment-action payment-action--primary" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
+              }
             }
-          }
-          <a routerLink="/checkout">Volver al checkout</a>
-        </div>
+            <a class="payment-action" [class.payment-action--primary]="cerrado()" routerLink="/checkout">Volver al checkout</a>
+          </div>
+        </section>
       }
     </main>
   `,
+  styleUrl: '../../shared/payment-ui.css',
   styles: [`
-    main { max-width: 780px; margin: auto; padding: 2rem; }
-    .receipt { padding: clamp(1rem, 5vw, 2rem); }
-    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+    main { max-width: 48rem; margin: auto; padding: clamp(1rem, 4vw, 3rem); }
+    .payment-panel { padding: clamp(1rem, 5vw, 2rem); background: var(--fnaf-surface); border: 1px solid var(--fnaf-border); border-radius: .375rem; }
+    h1 { margin-bottom: .5rem; font-size: clamp(1.65rem, 5vw, 2.25rem); line-height: 1.1; }
+    .payment-message { max-width: 56ch; }
+    .receipt-total { margin-top: 1.25rem; }
+    .receipt-total dd { font-size: 1.65rem; font-weight: 700; }
   `],
 })
 export class WebpayComponent implements OnInit {
@@ -64,6 +71,7 @@ export class WebpayComponent implements OnInit {
   private readonly quoteKey = crypto.randomUUID();
   private readonly paymentKey = crypto.randomUUID();
   readonly ocupado = signal(false);
+  readonly verificando = signal(false);
   readonly disponible = signal(false);
   readonly pedido = signal<number | null>(null);
   readonly total = signal<number | null>(null);
@@ -89,7 +97,7 @@ export class WebpayComponent implements OnInit {
       await firstValueFrom(this.http.get(`${this.api}/pagos/webpay/capacidad`).pipe(timeout(5000)));
       if (this.destroy.destroyed) return;
       this.disponible.set(true);
-      this.mensaje.set('El servidor cotiza el carrito antes de abrir Transbank.');
+      this.mensaje.set('Usa los datos de prueba de Transbank. El servidor cotiza el carrito antes de abrir el formulario.');
     } catch {
       this.mensaje.set('Webpay de integración no está disponible en este entorno.');
     }
@@ -134,17 +142,14 @@ export class WebpayComponent implements OnInit {
   }
 
   async retomar() {
-    const id = this.pendiente();
-    const retorno = this.retorno;
-    if (this.ocupado() || (!retorno && !id)) return;
+    if (this.ocupado() || (!this.retorno && !this.pendiente())) return;
     this.ocupado.set(true);
+    this.verificando.set(true);
+    this.mensaje.set('Estamos consultando el estado de tu pago en Webpay.');
     let aprobado = false;
     try {
-      const pago = retorno
-        ? await this.post<PagoWebpay>('/pagos/webpay/retorno', retorno)
-        : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id!)}/estado`, {});
-      if (this.destroy.destroyed || pago.simulacion !== false || pago.moneda !== 'CLP'
-          || (id && pago.pagoId !== id)) throw new Error();
+      const pago = await this.verificarPago();
+      if (this.destroy.destroyed || !pago) return;
       if (pago.estado === 'DECLINED' || pago.estado === 'EXPIRED') {
         this.mensaje.set(pago.estado === 'EXPIRED'
           ? 'Este intento de Webpay venció sin pago confirmado. Vuelve al checkout para obtener una nueva cotización.'
@@ -153,11 +158,9 @@ export class WebpayComponent implements OnInit {
         this.clear();
         return;
       }
-      this.retorno = undefined;
-      sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, pago.pagoId);
-      this.pendiente.set(pago.pagoId);
       if (pago.estado === 'APPROVED') {
         aprobado = true;
+        this.mensaje.set('Pago aprobado. Estamos confirmando tu pedido.');
         const pedido = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
           pagoId: pago.pagoId, operacionId: pago.operacionId,
         }, `webpay-${pago.pagoId}`);
@@ -168,17 +171,51 @@ export class WebpayComponent implements OnInit {
         this.pedido.set(pedido.pedidoId);
         this.clear();
       } else {
-        this.mensaje.set(retorno && !retorno.tokenWs
-          ? 'Transbank devolvió una cancelación o expiración. La transacción no está aprobada.'
-          : 'Pago sin aprobación confirmada. Verifica el mismo pago antes de iniciar otro.');
+        this.mensaje.set('Webpay aún no confirma el pago. Puedes volver a consultar este intento.');
       }
     } catch {
+      if (this.destroy.destroyed) return;
       this.mensaje.set(aprobado
         ? 'Pago aprobado. Falta confirmar el pedido. Usa Verificar el mismo pago.'
         : 'Verificación pendiente. Reintenta desde esta pantalla con la cuenta que inició el pago.');
     } finally {
+      this.verificando.set(false);
       this.ocupado.set(false);
     }
+  }
+
+  private async verificarPago(): Promise<PagoWebpay | null> {
+    for (let intento = 0; intento <= RECHECK_DELAYS_MS.length; intento++) {
+      if (intento > 0) {
+        const turno = await firstValueFrom(timer(RECHECK_DELAYS_MS[intento - 1]).pipe(takeUntilDestroyed(this.destroy)),
+          { defaultValue: null });
+        if (turno === null) return null;
+      }
+      const id = this.pendiente();
+      let pago: PagoWebpay;
+      try {
+        pago = this.retorno
+          ? await this.post<PagoWebpay>('/pagos/webpay/retorno', this.retorno)
+          : await this.post<PagoWebpay>(`/pagos/webpay/${encodeURIComponent(id!)}/estado`, {});
+      } catch (error) {
+        const transitorio = error instanceof TimeoutError || (error instanceof HttpErrorResponse
+          && (error.status === 0 || error.status >= 500));
+        if (!transitorio || intento === RECHECK_DELAYS_MS.length || this.destroy.destroyed) throw error;
+        if (id && error instanceof HttpErrorResponse && error.error?.code === 'WEBPAY_STATUS_UNAVAILABLE') {
+          this.retorno = undefined;
+        }
+        continue;
+      }
+      if (this.destroy.destroyed) return null;
+      if (pago.simulacion !== false || pago.moneda !== 'CLP' || !pago.pagoId || (id && pago.pagoId !== id)) {
+        throw new Error('Respuesta de pago incompatible.');
+      }
+      this.retorno = undefined;
+      sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, pago.pagoId);
+      this.pendiente.set(pago.pagoId);
+      if (pago.estado !== 'PENDING' || intento === RECHECK_DELAYS_MS.length) return pago;
+    }
+    return null;
   }
 
   private clear() {

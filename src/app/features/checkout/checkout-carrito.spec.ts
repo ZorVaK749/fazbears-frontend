@@ -72,6 +72,7 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     expect(webpay.injector.get(RouterLink).urlTree?.toString()).toBe('/checkout/webpay');
     expect(webpay.nativeElement.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('#btn-confirmar-pago')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Nuevo intento');
 
     fixture.componentInstance.procesando = true;
     fixture.changeDetectorRef.markForCheck();
@@ -209,5 +210,13 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     expect(req.request.body).toEqual({ operacionId: 'op-1', metodo: 'SIMULADO', instrumentoPruebaId: 'sim-declined' });
     req.flush(payment('DECLINED'), { status: 201, statusText: 'Created' }); await p;
     expect(f.componentInstance.pagoExitoso).toBe(false); expect(carrito.cantidadItems).toBe(1);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('#btn-confirmar-pago')).toBeNull();
+    const nuevo = Array.from(f.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent?.includes('Nuevo intento'));
+    expect(nuevo).toBeDefined();
+    nuevo!.click();
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('#btn-confirmar-pago')).not.toBeNull();
   });
 });
