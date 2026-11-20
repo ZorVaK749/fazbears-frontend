@@ -1,34 +1,41 @@
-import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CarritoService, IdentidadSesion } from '../../core/services/carrito.service';
 import { RecomendacionesService, Recomendaciones, Recomendacion } from '../../core/services/recomendaciones.service';
 import { ProductoService } from '../../core/services/producto.service';
-import { ClpPipe } from '../clp.pipe';
+import { ProductoCardComponent } from '../producto-card.component';
 
 @Component({
   selector: 'app-recomendaciones', standalone: true,
-  imports: [ClpPipe],
+  imports: [ProductoCardComponent],
   template: `
-    <section aria-label="Recomendaciones">
-      <h2 class="pixel text-neon-cyan">Recomendaciones</h2>
-      @if (vigente()) {
+    @if (vigente()) {
+      <section aria-labelledby="recomendaciones-titulo">
+        <header>
+          <h2 id="recomendaciones-titulo" class="text-neon-cyan">Recomendaciones</h2>
+          <button type="button" class="payment-action" [disabled]="cargando()" (click)="cargar()">Actualizar</button>
+        </header>
         @if (resultado(); as r) {
-          <p>Estrategia: {{ r.estrategia }} · {{ r.generadoEn }}</p>
-          @if (r.estrategia.startsWith('FALLBACK')) { <p>Alternativa de popularidad/catálogo; no es personalización.</p> }
-          @for (item of r.items; track item.productoId) {
-            <article class="card-fnaf">
-              <button class="btn-neon" (click)="ver(item)">{{ item.nombre }}</button>
-              <p>{{ item.categoria }} · {{ item.precio | clp }} · {{ item.razon }}</p>
-              <button class="btn-neon" (click)="seleccionar(item)">Añadir recomendado</button>
-            </article>
-          } @empty { <p>Sin recomendaciones disponibles; consulta el catálogo.</p> }
-        }
+          @if (r.items.length) {
+            <div class="recomendadas">
+              @for (item of r.items; track item.productoId) {
+                <app-producto-card class="compacta" [producto]="item" (ver)="ver(item)" (agregar)="seleccionar(item)" />
+              }
+            </div>
+          } @else { <p>Sin recomendaciones disponibles.</p> }
+        } @else if (cargando()) { <p role="status">Cargando recomendaciones…</p> }
         @if (mensaje()) { <p role="status">{{ mensaje() }}</p> }
-      }
-      <button class="btn-neon" (click)="cargar()">Actualizar recomendaciones</button>
-    </section>
+      </section>
+    }
   `,
-  styles: [`section { margin-bottom: 2rem; } h2 { font-size: 1rem; } article { display: inline-block; padding: 1rem; margin: .4rem; }`],
+  styleUrl: '../payment-ui.css',
+  styles: [`
+    section { margin-bottom: 2rem; }
+    header { display: flex; justify-content: space-between; gap: .75rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
+    h2 { font-size: clamp(1.35rem, 3vw, 1.75rem); }
+    .recomendadas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+    p { color: #b5b5cb; margin-block: .5rem; }
+  `],
 })
 export class RecomendacionesComponent {
   private svc = inject(RecomendacionesService);
@@ -38,23 +45,26 @@ export class RecomendacionesComponent {
   private identidad?: Readonly<IdentidadSesion>;
   resultado = signal<Recomendaciones | null>(null);
   mensaje = signal('');
+  cargando = signal(false);
   constructor() {
     effect(() => {
       this.identidad = this.carrito.identidadVerificada() ?? undefined;
-      this.resultado.set(null); this.mensaje.set('');
-      if (this.vigente()) this.cargar();
+      this.resultado.set(null); this.mensaje.set(''); this.cargando.set(false);
+      untracked(() => this.cargar());
     });
     void this.carrito.inicializar();
   }
   vigente() { return !!this.identidad && this.carrito.esIdentidadActual(this.identidad); }
   cargar() {
     const identidad = this.identidad;
-    if (!identidad || !this.carrito.esIdentidadActual(identidad)) return;
+    if (!identidad || !this.carrito.esIdentidadActual(identidad) || this.cargando()) return;
+    this.cargando.set(true);
+    this.mensaje.set('');
     this.svc.obtener().pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      next: r => { if (this.carrito.esIdentidadActual(identidad)) { this.resultado.set(r); this.mensaje.set(''); } },
+      next: r => { if (this.carrito.esIdentidadActual(identidad)) { this.resultado.set(r); this.cargando.set(false); } },
       error: () => {
         if (this.carrito.esIdentidadActual(identidad)) {
-          this.resultado.set(null); this.mensaje.set('Recomendaciones no disponibles. Alternativa: catálogo general, sin personalización.');
+          this.resultado.set(null); this.cargando.set(false); this.mensaje.set('No se pudieron cargar las recomendaciones.');
         }
       },
     });
@@ -72,9 +82,8 @@ export class RecomendacionesComponent {
   }
   private interaccion(id: number, tipo: 'VIEW' | 'SELECT') {
     if (!this.vigente()) return;
-    const identidad = this.identidad!;
     this.svc.interaccion(id, tipo).pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      error: () => { if (this.carrito.esIdentidadActual(identidad)) this.mensaje.set('No se pudo registrar la interacción. No se reenvió automáticamente.'); },
+      error: () => console.warn('No se pudo registrar una interacción de recomendaciones.'),
     });
   }
 }

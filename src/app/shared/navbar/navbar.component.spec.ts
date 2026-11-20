@@ -25,10 +25,15 @@ describe('Navbar and authenticated cart', () => {
     expect(inicializar).toHaveBeenCalledTimes(1);
     expect(fixture.componentInstance.usuario?.username).toBe('cuenta-activa@example.com');
     expect(fixture.nativeElement.querySelector('.carrito-badge').textContent).toBe('2');
+    expect(fixture.nativeElement.querySelector('#btn-carrito').getAttribute('aria-label')).toBe('Carrito (2)');
+    expect(fixture.nativeElement.querySelector('a[href="/actividad"]').textContent).toBe('Mi actividad');
+    expect(fixture.nativeElement.querySelector('a[href="/perfil"]').textContent).toBe('Mi perfil');
+    expect(fixture.nativeElement.querySelector('a[href="/perfil#configuracion"]')).not.toBeNull();
   });
   it('logout clears local cart before redirect without remote deletion', () => {
     const fixture = TestBed.createComponent(NavbarComponent);
-    fixture.componentInstance.logout(new Event('click'));
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('#btn-logout').click();
     expect(cerrarSesion).toHaveBeenCalledTimes(1);
     expect(logout).toHaveBeenCalledTimes(1);
     expect(cerrarSesion.mock.invocationCallOrder[0]).toBeLessThan(logout.mock.invocationCallOrder[0]);

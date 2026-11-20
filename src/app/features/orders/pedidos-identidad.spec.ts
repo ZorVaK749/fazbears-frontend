@@ -11,14 +11,12 @@ import { CarritoService } from '../../core/services/carrito.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 import { Pedido } from '../../core/services/pedido.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
-import { CarritoComponent } from '../cart/carrito.component';
 import { PerfilComponent } from '../perfil/perfil.component';
 import { ReportesComponent } from '../reportes/reportes.component';
 import { OrdersComponent } from './orders.component';
 import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
 
 @Component({ selector: 'app-navbar', standalone: true, template: '' }) class NavbarStub {}
-@Component({ selector: 'app-carrito', standalone: true, template: '' }) class CartStub {}
 @Component({ selector: 'app-fazcoins', standalone: true, template: '' }) class WalletStub {}
 const API = 'https://uuzifgcyd2.execute-api.us-east-1.amazonaws.com/ev3/api';
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -44,8 +42,7 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
           getAllAccounts: () => active ? [active] : [] }, logoutRedirect: logout } },
       ],
     }).overrideComponent(PerfilComponent, { remove: { imports: [NavbarComponent, FazcoinsComponent] }, add: { imports: [NavbarStub, WalletStub] } })
-      .overrideComponent(OrdersComponent, { remove: { imports: [NavbarComponent, CarritoComponent] },
-        add: { imports: [NavbarStub, CartStub] } })
+      .overrideComponent(OrdersComponent, { remove: { imports: [NavbarComponent] }, add: { imports: [NavbarStub] } })
       .overrideComponent(ReportesComponent, { remove: { imports: [NavbarComponent] }, add: { imports: [NavbarStub] } })
       .compileComponents();
     http = TestBed.inject(HttpTestingController); carrito = TestBed.inject(CarritoService);
@@ -93,6 +90,23 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
     http.expectOne(`${API}/pedidos/usuario/${A}`).flush([pedido()]);
     http.expectNone(`${API}/carrito/me`);
     http.expectNone(`${API}/carrito/${A}`);
+  });
+
+  it('conserva el pedido en CLP y excluye precios fraccionarios del historial y del perfil', async () => {
+    const { perfil, orders } = createBoth();
+    await identity();
+    const clp: Pedido = { ...pedido(A, 65), total: 11990,
+      items: [{ ...pedido().items[0], precioUnitario: 11990 }] };
+    const legado: Pedido = { ...pedido(A, 33), total: 12.99 };
+    const totalEnteroConPrecioFraccionario: Pedido = { ...pedido(A, 34), total: 13,
+      items: [{ ...pedido().items[0], cantidad: 2, precioUnitario: 6.5 }] };
+    http.expectOne(`${API}/pedidos/usuario/${A}`).flush([legado, totalEnteroConPrecioFraccionario, clp]);
+    orders.detectChanges();
+    expect(orders.componentInstance.pedidosFiltrados).toEqual([clp]);
+    expect(perfil.componentInstance.totalGastado).toBe(11990);
+    expect(orders.nativeElement.textContent).toContain('Pedido #65');
+    expect(orders.nativeElement.textContent).not.toContain('Pedido #33');
+    expect(orders.nativeElement.textContent).not.toContain('{{');
   });
 
   it('cambio de cuenta vacía datos y cancela consulta de A antes de consultar B', async () => {

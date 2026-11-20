@@ -2,8 +2,9 @@ import {
   ApplicationConfig,
   provideBrowserGlobalErrorListeners,
   importProvidersFrom,
+  inject,
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withInMemoryScrolling, withNavigationErrorHandler } from '@angular/router';
 import {
   provideHttpClient,
   withInterceptorsFromDi,
@@ -19,11 +20,13 @@ import {
   MSALGuardConfigFactory,
 } from './core/auth/auth.config';
 import { routes } from './app.routes';
+import { NavegacionRecuperacion } from './core/navegacion-recuperacion.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(routes, withInMemoryScrolling({ anchorScrolling: 'enabled' }),
+      withNavigationErrorHandler(evento => inject(NavegacionRecuperacion).recuperar(evento))),
 
     // HttpClient con soporte para interceptores DI (necesario para MsalInterceptor)
     provideHttpClient(withInterceptorsFromDi()),

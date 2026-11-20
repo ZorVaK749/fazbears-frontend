@@ -65,8 +65,8 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
         </div>
 
         <!-- Detalles de cuenta -->
-        <div class="cuenta-panel">
-          <h2 class="pixel panel-title text-neon-purple">🔐 DETALLES DE CUENTA</h2>
+        <div id="configuracion" class="cuenta-panel">
+          <h2 class="pixel panel-title text-neon-purple">Configuración de cuenta</h2>
           <div class="cuenta-grid">
             <div class="cuenta-item">
               <span class="cuenta-key pixel">Nombre</span>
@@ -167,6 +167,7 @@ import { FazcoinsComponent } from '../../shared/fazcoins/fazcoins.component';
     .stat-label { color: var(--fnaf-muted); font-size: 0.75rem; margin-top: 0.3rem; }
 
     /* Cuenta */
+    .cuenta-panel { scroll-margin-top: 7rem; }
     .cuenta-panel, .acciones-panel {
       background: var(--fnaf-surface); border: 1px solid var(--fnaf-border);
       padding: 1.5rem; margin-bottom: 1.5rem;

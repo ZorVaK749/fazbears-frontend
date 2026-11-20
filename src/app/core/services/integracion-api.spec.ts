@@ -54,22 +54,27 @@ describe('Reward and recommendation API / UI contracts (mock HTTP, not Azure bro
     expect(f.nativeElement.textContent).toContain('no son pagos ni descuentan');
     expect(f.nativeElement.textContent).not.toContain('1,500');
   });
-  it('renders dynamic fallback recommendation strategy and sends selection interaction', () => {
+  it('renders recommended product cards without technical metadata and sends selection interaction', () => {
     const f = TestBed.createComponent(RecomendacionesComponent); f.detectChanges();
     http.expectOne('/api/recomendaciones/me?limit=6').flush(recs); f.detectChanges();
-    expect(f.nativeElement.textContent).toContain('FALLBACK_POPULARITY');
-    expect(f.nativeElement.textContent).toContain('no es personalización');
+    expect(f.nativeElement.textContent).not.toContain('FALLBACK_POPULARITY');
+    expect(f.nativeElement.textContent).not.toContain('2026-01-01');
+    expect(f.nativeElement.textContent).not.toContain('Popularidad real');
     expect(f.nativeElement.textContent).toContain('Pizza backend');
-    f.componentInstance.seleccionar(recs.items[0]);
+    f.nativeElement.querySelector('button[aria-label="Añadir Pizza backend"]').click();
     const r = http.expectOne('/api/productos/7/interacciones'); expect(r.request.body).toEqual({ tipo: 'SELECT' }); r.flush(null);
     http.expectOne('/api/productos/7').flush({ id: 7, nombre: 'Pizza actual', categoria: 'PIZZA', precio: 15, descripcion: 'Catálogo' });
     expect(carrito.agregarProducto).toHaveBeenCalledWith(expect.objectContaining({ id: 7, precio: 15 }));
   });
-  it('recommendation error shows catalogue fallback, not invented recommendations', () => {
+  it('shows a retryable recommendation error and leaves the results empty', () => {
     const f = TestBed.createComponent(RecomendacionesComponent); f.detectChanges();
     http.expectOne('/api/recomendaciones/me?limit=6').flush({}, { status: 503, statusText: 'Unavailable' }); f.detectChanges();
-    expect(f.nativeElement.textContent).toContain('catálogo general, sin personalización');
+    expect(f.nativeElement.textContent).toContain('No se pudieron cargar las recomendaciones.');
     expect(f.componentInstance.resultado()).toBeNull();
+    f.nativeElement.querySelector('button.payment-action').click();
+    http.expectOne('/api/recomendaciones/me?limit=6').flush(recs);
+    f.detectChanges();
+    expect(f.nativeElement.textContent).toContain('Pizza backend');
   });
   it('a late recommendation from the old session cannot appear in the new account', () => {
     const f = TestBed.createComponent(RecomendacionesComponent); f.detectChanges();

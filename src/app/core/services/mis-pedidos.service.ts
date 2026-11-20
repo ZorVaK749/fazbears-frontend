@@ -22,7 +22,9 @@ export class MisPedidosService {
   private readonly peticiones = new Set<Subscription>();
   private generacion = 0;
 
-  readonly pedidos = computed(() => this.vigente() ? this.estado().pedidos : []);
+  readonly pedidos = computed(() => this.vigente() ? this.estado().pedidos.filter(pedido =>
+    (pedido.total == null || Number.isInteger(pedido.total)) &&
+    pedido.items.every(item => Number.isInteger(item.precioUnitario))) : []);
   readonly procesando = computed(() => this.vigente() ? this.estado().procesando : {});
   readonly cargando = computed(() => this.carrito.identidadVerificada()
     ? !this.vigente() || this.estado().cargando : this.carrito.sincronizando());
