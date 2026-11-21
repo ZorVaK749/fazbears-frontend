@@ -101,7 +101,12 @@ export class OrdersComponent implements OnInit {
 
   formatFecha(fecha?: string): string {
     if (!fecha) return '—';
-    return new Date(fecha).toLocaleDateString('es-CL', {
+    // AWS persists order creation in UTC and the legacy API sends that value without an offset.
+    const fechaConZona = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(fecha) ? fecha : `${fecha}Z`;
+    const instante = new Date(fechaConZona);
+    if (Number.isNaN(instante.getTime())) return '—';
+    return instante.toLocaleString('es-CL', {
+      timeZone: 'America/Santiago', hourCycle: 'h23',
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
   }

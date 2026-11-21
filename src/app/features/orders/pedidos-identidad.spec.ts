@@ -109,6 +109,20 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
     expect(orders.nativeElement.textContent).not.toContain('{{');
   });
 
+  it('muestra la fecha UTC del pedido en Santiago aunque cambie el día', async () => {
+    const orders = TestBed.createComponent(OrdersComponent);
+    orders.detectChanges();
+    await identity();
+    http.expectOne(`${API}/pedidos/usuario/${A}`).flush([
+      { ...pedido(A, 97), fechaCreacion: '2026-11-21T01:06:34.123456' },
+    ]);
+    orders.detectChanges();
+    expect(orders.nativeElement.querySelector('.fecha').textContent).toMatch(/20 nov 2026.*22:06/);
+    expect(orders.componentInstance.formatFecha('2026-11-20T22:06:34-03:00')).toMatch(/20 nov 2026.*22:06/);
+    expect(orders.componentInstance.formatFecha('2026-07-21T01:06:34Z')).toMatch(/20 jul 2026.*21:06/);
+    expect(orders.componentInstance.formatFecha('inválida')).toBe('—');
+  });
+
   it('cambio de cuenta vacía datos y cancela consulta de A antes de consultar B', async () => {
     const { perfil, orders } = createBoth(); await identity();
     const old = http.expectOne(`${API}/pedidos/usuario/${A}`);
