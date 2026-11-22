@@ -2,6 +2,7 @@ import { Component, ElementRef, OnInit, inject, viewChild } from '@angular/core'
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
+import { logoutRedirectUri } from '../../core/auth/auth.config';
 import { CarritoService } from '../../core/services/carrito.service';
 
 @Component({
@@ -111,6 +112,6 @@ export class NavbarComponent implements OnInit {
 
   logout() {
     this.carritoSvc.cerrarSesion();
-    this.msalSvc.logoutRedirect({ postLogoutRedirectUri: window.location.origin + '/login' });
+    this.msalSvc.logoutRedirect({ postLogoutRedirectUri: logoutRedirectUri() });
   }
 }

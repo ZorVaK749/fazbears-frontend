@@ -7,11 +7,12 @@ describe('Recuperación de navegación tras publicar el frontend', () => {
   const origen = 'https://pedidos.example';
   const falloDeModulo = new TypeError('error loading dynamically imported module');
 
-  function preparar() {
+  function preparar(basePath = '/') {
     const replace = vi.fn();
     const sessionStorage = { getItem: vi.fn(() => null as string | null), setItem: vi.fn() };
     const inyector = Injector.create({ providers: [NavegacionRecuperacion,
-      { provide: DOCUMENT, useValue: { defaultView: { location: { origin: origen, replace }, sessionStorage } } },
+      { provide: DOCUMENT, useValue: { baseURI: origen + basePath,
+        defaultView: { location: { origin: origen, replace }, sessionStorage } } },
     ] });
     return { recuperacion: inyector.get(NavegacionRecuperacion), replace, sessionStorage };
   }
@@ -29,6 +30,13 @@ describe('Recuperación de navegación tras publicar el frontend', () => {
     recuperacion.recuperar(new NavigationError(1, '/actividad', falloDeModulo));
     expect(replace).not.toHaveBeenCalled();
     expect(recuperacion.destino()).toBe('/actividad');
+  });
+
+  it('conserva el stage, la ruta de retorno y la consulta al recargar', () => {
+    const { recuperacion, replace } = preparar('/ev3/');
+    recuperacion.recuperar(new NavigationError(1, '/checkout/webpay?prueba=ok', falloDeModulo));
+    expect(replace).toHaveBeenCalledWith(`${origen}/ev3/checkout/webpay?prueba=ok`);
+    expect(recuperacion.destino()).toBe('/ev3/checkout/webpay?prueba=ok');
   });
 
   it('ignora otros errores y destinos externos', () => {

@@ -6,6 +6,11 @@
   <title>Pedidos360 — Freddy Fazbear's Pizza 1987</title>
   <meta name="description" content="Sistema de pedidos oficial de Freddy Fazbear's Pizza. Ordena pizzas, bebidas y reserva animatrónicos para tus eventos.">
   <base href="/">
+  <script>
+    if (/^\/ev3(?:\/|$)/.test(window.location.pathname)) {
+      document.querySelector('base').href = '/ev3/';
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <!-- Google Fonts: VT323 (pixel/terminal) + Rajdhani (body) -->

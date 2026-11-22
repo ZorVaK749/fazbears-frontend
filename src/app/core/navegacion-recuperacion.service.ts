@@ -13,8 +13,10 @@ export class NavegacionRecuperacion {
     const ventana = this.documento.defaultView;
     if (!ventana || !ERROR_DE_MODULO.test(String(evento.error?.message ?? evento.error))) return;
 
-    const destino = new URL(evento.url, ventana.location.origin);
-    if (destino.origin !== ventana.location.origin) return;
+    if (!/^\/(?![/\\])/.test(evento.url)) return;
+    const base = new URL(this.documento.baseURI);
+    const destino = new URL('.' + evento.url, base);
+    if (destino.origin !== ventana.location.origin || !destino.pathname.startsWith(base.pathname)) return;
 
     this.destino.set(destino.pathname + destino.search + destino.hash);
     try {

@@ -3,6 +3,7 @@ import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { RouterLink } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
+import { logoutRedirectUri } from '../../core/auth/auth.config';
 import { Pedido } from '../../core/services/pedido.service';
 import { CarritoService } from '../../core/services/carrito.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
@@ -234,7 +235,7 @@ export class PerfilComponent implements OnInit {
   logout() {
     this.carrito.cerrarSesion();
     this.msalSvc.logoutRedirect({
-      postLogoutRedirectUri: window.location.origin + '/login',
+      postLogoutRedirectUri: logoutRedirectUri(),
     });
   }
 }

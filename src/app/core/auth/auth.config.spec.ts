@@ -1,4 +1,4 @@
-import { API_SCOPE, MSALInterceptorConfigFactory } from './auth.config';
+import { API_SCOPE, MSALInterceptorConfigFactory, spaRedirectUri } from './auth.config';
 
 describe('MSAL cart URL compatibility', () => {
   it('keeps the current API Gateway /ev3/api/carrito protected resource', () => {
@@ -19,5 +19,10 @@ describe('MSAL cart URL compatibility', () => {
     expect([...map.keys()].every(url => url.startsWith(`${window.location.origin}/api/`))).toBe(true);
     expect(map.has('http://localhost:18090/api/pagos')).toBe(false);
     expect(map.has('https://untrusted.example/api/pagos')).toBe(false);
+  });
+  it('uses the exact named-stage callback and retains the existing root callback during migration', () => {
+    const origin = 'https://pedidos.example';
+    expect(spaRedirectUri(origin + '/ev3/')).toBe(origin + '/ev3/');
+    expect(spaRedirectUri(origin + '/')).toBe(origin);
   });
 });

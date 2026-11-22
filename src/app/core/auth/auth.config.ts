@@ -19,13 +19,23 @@ export const AZURE_TENANT_ID = 'ee0d2c5b-e60b-4c57-9b30-8a38a520c430';
 // Scope expuesto en "Expose an API" → api://<client-id>/access_as_user
 export const API_SCOPE = `api://${AZURE_CLIENT_ID}/access_as_user`;
 
+export function spaRedirectUri(baseUri: string): string {
+  const base = new URL(baseUri);
+  return base.pathname === '/ev3/' ? base.href : base.origin;
+}
+
+export function logoutRedirectUri(): string {
+  const base = new URL(document.baseURI);
+  return base.pathname === '/ev3/' ? spaRedirectUri(base.href) : new URL('login', base).href;
+}
+
 // ─── MSAL Browser Configuration ──────────────────────────────────────────────
 export const msalConfig: Configuration = {
   auth: {
     clientId: AZURE_CLIENT_ID,
     authority: `https://login.microsoftonline.com/${AZURE_TENANT_ID}`,
-    redirectUri: window.location.origin,
-    postLogoutRedirectUri: window.location.origin,
+    redirectUri: spaRedirectUri(document.baseURI),
+    postLogoutRedirectUri: spaRedirectUri(document.baseURI),
     navigateToLoginRequestUrl: true,
   },
   cache: {
