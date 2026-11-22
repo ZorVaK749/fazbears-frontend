@@ -21,7 +21,8 @@ function callback(request) {
 
     const form = querystring.parse(request.requestText || '', '&', '=', { maxKeys: 0 });
     const fields = {};
-    for (const key of FIELDS) {
+    for (let i = 0; i < FIELDS.length; i++) {
+        const key = FIELDS[i];
         if (form[key] === undefined) continue;
         if (typeof form[key] !== 'string' || !VALUE.test(form[key])) {
             request.return(400);
