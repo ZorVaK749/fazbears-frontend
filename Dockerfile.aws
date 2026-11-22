@@ -7,4 +7,9 @@ RUN npm run build -- --configuration production
 FROM nginx:1.28-alpine
 COPY --from=build /app/dist/fazbear-frontend/browser /usr/share/nginx/html
 COPY nginx.aws.conf /etc/nginx/conf.d/default.conf
+COPY nginx.webpay.js /etc/nginx/webpay-return.js
+RUN sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
+RUN --mount=type=bind,source=nginx.webpay-smoke.sh,target=/tmp/nginx.webpay-smoke.sh \
+    apk add --no-cache --virtual .webpay-smoke curl && \
+    sh /tmp/nginx.webpay-smoke.sh && apk del .webpay-smoke
 EXPOSE 80

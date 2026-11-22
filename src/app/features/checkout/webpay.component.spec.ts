@@ -18,8 +18,8 @@ describe('Webpay integration return', () => {
 
   const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-  function setup() {
-    const snapshot = { queryParamMap: convertToParamMap({ token_ws: 'provider-reference-for-test' }) };
+  function setup(fragment: string | null = null) {
+    const snapshot = { fragment, queryParamMap: convertToParamMap(fragment ? {} : { token_ws: 'provider-reference-for-test' }) };
     TestBed.configureTestingModule({
       imports: [WebpayComponent],
       providers: [
@@ -38,6 +38,18 @@ describe('Webpay integration return', () => {
 
   const pagoAprobado = { pagoId: paymentId, operacionId: 'op-1', estado: 'APPROVED', importe: 12990,
     moneda: 'CLP', simulacion: false };
+
+  it('reconciles a cancelled form return without confirming an order', async () => {
+    const { fixture, http } = setup('TBK_TOKEN=cancelled-test-reference&TBK_ORDEN_COMPRA=test-order&TBK_ID_SESION=test-session');
+    const verify = http.expectOne('/api/pagos/webpay/retorno');
+    expect(verify.request.body).toEqual({ tokenWs: null, tbkToken: 'cancelled-test-reference',
+      buyOrder: 'test-order', sessionId: 'test-session' });
+    verify.flush({ ...pagoAprobado, estado: 'DECLINED' });
+    await turno();
+    expect(fixture.componentInstance.cerrado()).toBe(true);
+    http.expectNone('/api/orden/confirmar-pago');
+    http.verify();
+  });
 
   it('requests order confirmation only after server approval of the provider return', async () => {
     const { fixture, http } = setup();

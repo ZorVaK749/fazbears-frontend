@@ -81,7 +81,8 @@ export class WebpayComponent implements OnInit {
   retorno?: Retorno;
 
   async ngOnInit() {
-    const params = this.route.snapshot.queryParamMap;
+    const { fragment, queryParamMap } = this.route.snapshot;
+    const params = fragment ? new URLSearchParams(fragment) : queryParamMap;
     const fields = { tokenWs: params.get('token_ws'), tbkToken: params.get('TBK_TOKEN'),
       buyOrder: params.get('TBK_ORDEN_COMPRA'), sessionId: params.get('TBK_ID_SESION') };
     if (Object.values(fields).some(Boolean)) {
