@@ -38,4 +38,15 @@ describe('Navbar and authenticated cart', () => {
     expect(logout).toHaveBeenCalledTimes(1);
     expect(cerrarSesion.mock.invocationCallOrder[0]).toBeLessThan(logout.mock.invocationCallOrder[0]);
   });
+  it('cierra el menú con clic fuera y permite interactuar dentro', () => {
+    const fixture = TestBed.createComponent(NavbarComponent);
+    fixture.detectChanges();
+    const menu: HTMLDetailsElement = fixture.nativeElement.querySelector('details');
+    menu.querySelector('summary')!.click();
+    expect(menu.open).toBe(true);
+    menu.querySelector<HTMLElement>('.cuenta-opciones')!.click();
+    expect(menu.open).toBe(true);
+    document.body.click();
+    expect(menu.open).toBe(false);
+  });
 });

@@ -2,7 +2,7 @@ import { Component, DestroyRef, effect, inject, signal, untracked } from '@angul
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, map, Subscription, timeout } from 'rxjs';
-import { API_BASE_URL } from '../../core/api.config';
+import { ANALYTICS_LIVE_ENABLED, API_BASE_URL } from '../../core/api.config';
 import { CarritoService, IdentidadSesion } from '../../core/services/carrito.service';
 import { formatearFechaSantiago } from '../../shared/fecha-santiago';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
@@ -58,32 +58,34 @@ interface Metrics {
         }
       </section>
 
-      <h2>Actividad en vivo</h2>
-      <p class="ultima">Última hora de actividad en esta cuenta</p>
-      <p role="status">{{ estado() }}</p>
-      @if (metrics(); as data) {
-        <div class="metricas">
-          <section>
-            <h2>Interacciones</h2>
-            <p class="total">{{ data.interacciones }}</p>
-          </section>
-          <section>
-            <h2>Productos más vistos</h2>
-            <ol>
-              @for (producto of data.productosMasVistos; track producto.productoId) {
-                <li>{{ producto.nombre }} <strong>{{ producto.visitas }}</strong></li>
-              } @empty { <li>Sin vistas registradas.</li> }
-            </ol>
-          </section>
-          <section>
-            <h2>Interacciones por categoría</h2>
-            <ul>
-              @for (categoria of data.categorias; track categoria.categoria) {
-                <li>{{ categoria.categoria }} <strong>{{ categoria.interacciones }}</strong></li>
-              } @empty { <li>Sin actividad registrada.</li> }
-            </ul>
-          </section>
-        </div>
+      @if (actividadEnVivoHabilitada) {
+        <h2>Actividad en vivo</h2>
+        <p class="ultima">Última hora de actividad en esta cuenta</p>
+        <p role="status">{{ estado() }}</p>
+        @if (metrics(); as data) {
+          <div class="metricas">
+            <section>
+              <h2>Interacciones</h2>
+              <p class="total">{{ data.interacciones }}</p>
+            </section>
+            <section>
+              <h2>Productos más vistos</h2>
+              <ol>
+                @for (producto of data.productosMasVistos; track producto.productoId) {
+                  <li>{{ producto.nombre }} <strong>{{ producto.visitas }}</strong></li>
+                } @empty { <li>Sin vistas registradas.</li> }
+              </ol>
+            </section>
+            <section>
+              <h2>Interacciones por categoría</h2>
+              <ul>
+                @for (categoria of data.categorias; track categoria.categoria) {
+                  <li>{{ categoria.categoria }} <strong>{{ categoria.interacciones }}</strong></li>
+                } @empty { <li>Sin actividad registrada.</li> }
+              </ul>
+            </section>
+          </div>
+        }
       }
     </main>
   `,
@@ -109,6 +111,7 @@ export class DashboardComponent {
   private readonly api = inject(API_BASE_URL);
   private readonly destroy = inject(DestroyRef);
   protected readonly carrito = inject(CarritoService);
+  protected readonly actividadEnVivoHabilitada = inject(ANALYTICS_LIVE_ENABLED);
   protected readonly acciones = acciones;
   protected readonly formatFecha = formatearFechaSantiago;
   private resumenPendiente?: Subscription;
@@ -141,7 +144,7 @@ export class DashboardComponent {
         socket?.close();
       });
       untracked(() => this.actualizarResumen());
-      void this.connect(identidad);
+      if (this.actividadEnVivoHabilitada) void this.connect(identidad);
     });
   }
 

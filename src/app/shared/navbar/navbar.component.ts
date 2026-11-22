@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, ElementRef, OnInit, inject, viewChild } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
@@ -7,6 +7,7 @@ import { CarritoService } from '../../core/services/carrito.service';
 @Component({
   selector: 'app-navbar',
   imports: [RouterLink, RouterLinkActive],
+  host: { '(document:click)': 'cerrarCuentaAlPulsarFuera($event)' },
   template: `
     <nav class="navbar" aria-label="Navegación principal">
       <a routerLink="/catalogo" class="marca">
@@ -95,11 +96,17 @@ import { CarritoService } from '../../core/services/carrito.service';
 export class NavbarComponent implements OnInit {
   readonly carritoSvc = inject(CarritoService);
   private readonly msalSvc = inject(MsalService);
+  private readonly menuCuenta = viewChild<ElementRef<HTMLDetailsElement>>('cuenta');
 
   get usuario(): AccountInfo | null { return this.carritoSvc.cuentaActual(); }
 
   ngOnInit() {
     void this.carritoSvc.inicializar();
+  }
+
+  protected cerrarCuentaAlPulsarFuera(evento: MouseEvent): void {
+    const menu = this.menuCuenta()?.nativeElement;
+    if (menu?.open && !evento.composedPath().includes(menu)) menu.open = false;
   }
 
   logout() {
