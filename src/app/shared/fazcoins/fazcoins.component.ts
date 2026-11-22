@@ -1,14 +1,15 @@
-import { Component, effect, inject, signal } from '@angular/core';
-import { JsonPipe } from '@angular/common';
+import { Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DestroyRef } from '@angular/core';
 import { CarritoService, IdentidadSesion } from '../../core/services/carrito.service';
 import { FidelizacionService, Saldo, Movimiento, Recompensa } from '../../core/services/fidelizacion.service';
+import { formatearFechaSantiago } from '../fecha-santiago';
+
+const formatoMovimiento = new Intl.NumberFormat('es-CL', { signDisplay: 'exceptZero' });
 
 @Component({
-  selector: 'app-fazcoins', standalone: true, imports: [JsonPipe],
+  selector: 'app-fazcoins', standalone: true,
   template: `
     <section aria-label="FazCoins">
       <h2 class="pixel text-neon-yellow">FazCoins · recompensas digitales</h2>
@@ -22,8 +23,21 @@ import { FidelizacionService, Saldo, Movimiento, Recompensa } from '../../core/s
             }
           </div>
           <h3>Movimientos</h3>
-          @for (m of movimientos(); track $index) { <pre>{{ m | json }}</pre> }
-          @empty { <p>Sin movimientos registrados.</p> }
+          @if (movimientos().length) {
+            <ul class="historial" aria-label="Movimientos de FazCoins">
+              @for (movimiento of movimientos(); track movimiento.id) {
+                <li>
+                  <div>
+                    <strong>{{ tituloMovimiento(movimiento.tipo) }}</strong>
+                    <span class="fecha">{{ formatFecha(movimiento.creadoEn) }}</span>
+                  </div>
+                  <strong class="monedas" [class.abono]="movimiento.monedas > 0">
+                    {{ formatMonedas(movimiento.monedas) }}
+                  </strong>
+                </li>
+              }
+            </ul>
+          } @else { <p>Sin movimientos registrados.</p> }
         }
         @if (mensajeCarga() || mensaje()) { <p role="status">{{ mensajeCarga() || mensaje() }}</p> }
       }
@@ -37,7 +51,11 @@ import { FidelizacionService, Saldo, Movimiento, Recompensa } from '../../core/s
     section { padding: clamp(1rem, 4vw, 1.5rem); margin-block: 1rem; background: var(--fnaf-surface); border: 1px solid var(--fnaf-border); border-radius: .375rem; }
     h2 { margin-bottom: .35rem; font-size: 1.35rem; }
     h3 { margin-top: .75rem; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .historial { display: grid; gap: .4rem; margin-block: .5rem 0; }
+    .historial li { display: flex; flex-wrap: wrap; gap: .25rem 1rem; justify-content: space-between; align-items: center; padding: .6rem .75rem; background: var(--fnaf-surface2); border-radius: .3rem; }
+    .fecha { display: block; color: #b5b5cb; font-size: .9rem; }
+    .monedas { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .abono { color: var(--fnaf-cyan); }
   `],
 })
 export class FazcoinsComponent {
@@ -51,6 +69,21 @@ export class FazcoinsComponent {
   mensaje = signal('');
   mensajeCarga = signal('');
   ocupado = signal(false);
+  protected readonly formatFecha = formatearFechaSantiago;
+
+  protected tituloMovimiento(tipo: string): string {
+    switch (tipo) {
+      case 'AWARD': return 'Abono por compra simulada';
+      case 'REDEMPTION': return 'Canje de recompensa';
+      case 'REVERSAL': return 'Reversión de abono';
+      default: return 'Movimiento de FazCoins';
+    }
+  }
+
+  protected formatMonedas(monedas: number): string {
+    return Number.isSafeInteger(monedas) ? `${formatoMovimiento.format(monedas)} Fz` : '—';
+  }
+
   constructor() {
     effect(() => {
       const identidad = this.carrito.identidadVerificada();
@@ -89,7 +122,7 @@ export class FazcoinsComponent {
     try {
       await this.svc.solicitarCanje(id);
       if (!this.destroy.destroyed && this.carrito.esIdentidadActual(identidad)) {
-        this.mensaje.set('Recompensa digital canjeada. El total del pedido no cambia.'); this.cargar();
+        this.mensaje.set('Recompensa canjeada.'); this.cargar();
       }
     } catch (e) {
       if (!this.destroy.destroyed && this.carrito.esIdentidadActual(identidad)) this.mensaje.set((e as Error).message);

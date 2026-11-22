@@ -4,6 +4,7 @@ import { Pedido } from '../../core/services/pedido.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { ClpPipe } from '../../shared/clp.pipe';
+import { formatearFechaSantiago } from '../../shared/fecha-santiago';
 
 @Component({
   selector: 'app-orders',
@@ -99,17 +100,7 @@ export class OrdersComponent implements OnInit {
   cancelarPedido(pedido: Pedido) { this.misPedidosSvc.cancelar(pedido); }
   actualizar() { this.misPedidosSvc.actualizar(); }
 
-  formatFecha(fecha?: string): string {
-    if (!fecha) return '—';
-    // AWS persists order creation in UTC and the legacy API sends that value without an offset.
-    const fechaConZona = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(fecha) ? fecha : `${fecha}Z`;
-    const instante = new Date(fechaConZona);
-    if (Number.isNaN(instante.getTime())) return '—';
-    return instante.toLocaleString('es-CL', {
-      timeZone: 'America/Santiago', hourCycle: 'h23',
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  }
+  readonly formatFecha = formatearFechaSantiago;
 
   badgeClass(estado?: string): string { return `badge-${estado ?? 'PENDIENTE'}`; }
 }

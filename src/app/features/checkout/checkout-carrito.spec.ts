@@ -161,6 +161,7 @@ describe('Checkout: synchronized owner-bound quote / simulated payment / order',
     await cargar(); const f = create(); const p = f.componentInstance.procesarPago(); await turno(); await cotizar();
     http.expectOne(`${API}/pagos`).flush(payment('BLOCKED'), { status: 429, statusText: 'Too Many Requests' }); await p;
     expect(f.componentInstance.errorMsg).toContain('bloqueado'); expect(f.componentInstance.pagoExitoso).toBe(false);
+    expect(f.componentInstance.errorMsg).not.toContain('429');
     http.expectNone(`${API}/orden/confirmar-pago`);
   });
   it('does not wipe a newer cart after successful confirmation', async () => {

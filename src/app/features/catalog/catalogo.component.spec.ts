@@ -15,7 +15,7 @@ class NavbarStub {}
 class RecomendacionesStub {}
 
 describe('Catálogo', () => {
-  it('muestra el 503 del catálogo y permite volver a consultar Productos', () => {
+  it('muestra un mensaje legible cuando el catálogo falla y permite volver a intentarlo', () => {
     TestBed.configureTestingModule({
       imports: [CatalogoComponent],
       providers: [
@@ -36,8 +36,8 @@ describe('Catálogo', () => {
     http.expectOne(productos).flush(null, { status: 503, statusText: 'Service Unavailable' });
 
     const alert = fixture.nativeElement.querySelector('[role=alert]');
-    expect(alert.textContent).toContain('HTTP 503');
-    expect(alert.textContent).not.toContain('localhost');
+    expect(alert.textContent).toContain('El catálogo no está disponible por el momento.');
+    expect(alert.textContent).not.toMatch(/HTTP|503|localhost/);
     alert.querySelector('button').click();
     http.expectOne(productos).flush([{ id: 1, nombre: 'Margherita', categoria: 'PIZZA', precio: 12990 }]);
     expect(fixture.nativeElement.querySelector('[role=alert]')).toBeNull();

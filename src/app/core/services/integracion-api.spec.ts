@@ -27,9 +27,15 @@ describe('Reward and recommendation API / UI contracts (mock HTTP, not Azure bro
   });
   afterEach(() => http.verify());
   const saldo = { saldo: 135, disponible: 135, deuda: 0, simulacion: true };
+  const movimientos = [
+    { id: 'mov-abono', tipo: 'AWARD', referenciaId: 'pago-interno', monedas: 675,
+      disponibleDelta: 675, creadoEn: '2026-11-22T21:42:00.290360Z', simulacion: true },
+    { id: 'mov-canje', tipo: 'REDEMPTION', monedas: -100, creadoEn: '2026-11-22T21:44:00Z' },
+    { id: 'mov-reversion', tipo: 'REVERSAL', monedas: -440, creadoEn: '2026-11-22T21:45:00Z' },
+  ];
   function walletRead() {
     http.expectOne('/api/fidelizacion/me/saldo').flush(saldo);
-    http.expectOne('/api/fidelizacion/me/movimientos').flush([{ tipo: 'CREDITO', cantidad: 135 }]);
+    http.expectOne('/api/fidelizacion/me/movimientos').flush(movimientos);
     http.expectOne('/api/fidelizacion/recompensas').flush([{ id: 'faz-vip', nombre: 'Insignia Faz VIP', costo: 100 }]);
   }
   const recs = { estrategia: 'FALLBACK_POPULARITY', generadoEn: '2026-01-01', items: [
@@ -47,12 +53,22 @@ describe('Reward and recommendation API / UI contracts (mock HTTP, not Azure bro
       expect(r.request.body).toEqual({ tipo }); r.flush(null);
     }
   });
-  it('loads actual wallet balance, ledger, rewards and explicit no-discount copy', () => {
+  it('renders movements in local time without internal fields or codes', () => {
     const f = TestBed.createComponent(FazcoinsComponent); f.detectChanges(); walletRead(); f.detectChanges();
-    expect(f.nativeElement.textContent).toContain('135');
-    expect(f.nativeElement.textContent).toContain('CREDITO');
-    expect(f.nativeElement.textContent).toContain('no son pagos ni descuentan');
-    expect(f.nativeElement.textContent).not.toContain('1,500');
+    const view: HTMLElement = f.nativeElement;
+    const history = view.querySelectorAll('.historial li');
+    expect(history).toHaveLength(3);
+    expect(history[0].textContent).toContain('Abono por compra simulada');
+    expect(history[0].textContent).toContain('+675 Fz');
+    expect(history[0].textContent).toMatch(/22 nov 2026.*18:42/);
+    expect(history[1].textContent).toContain('Canje de recompensa');
+    expect(history[1].textContent).toContain('-100 Fz');
+    expect(history[2].textContent).toContain('Reversión de abono');
+    expect(view.querySelector('pre')).toBeNull();
+    expect(view.textContent).not.toMatch(/AWARD|REDEMPTION|REVERSAL|mov-abono|pago-interno|disponibleDelta|referenciaId/);
+    expect(view.textContent).toContain('135 Fz');
+    expect(view.textContent).toContain('Insignia Faz VIP');
+    expect(view.textContent).toContain('no son pagos ni descuentan');
   });
   it('renders recommended product cards without technical metadata and sends selection interaction', () => {
     const f = TestBed.createComponent(RecomendacionesComponent); f.detectChanges();
@@ -97,10 +113,10 @@ describe('Reward and recommendation API / UI contracts (mock HTTP, not Azure bro
     expect(r.request.body).toEqual(req.request.body); expect(r.request.headers.get('Idempotency-Key')).toBe(key);
     r.flush({}); await retry;
   });
-  for (const status of [422, 409]) {
+  for (const [status, mensaje] of [[422, 'No tienes FazCoins suficientes'], [409, 'Actualiza tu saldo']] as const) {
     it(`canje ${status} is an explicit failure and allows a new key`, async () => {
       const svc = TestBed.inject(FidelizacionService); const p = svc.solicitarCanje('faz-vip');
-      const assertion = expect(p).rejects.toThrow(String(status)); const req = http.expectOne('/api/fidelizacion/me/canjes');
+      const assertion = expect(p).rejects.toThrow(mensaje); const req = http.expectOne('/api/fidelizacion/me/canjes');
       req.flush({}, { status, statusText: 'Rejected' }); await assertion;
       const next = svc.solicitarCanje('faz-vip'); const r = http.expectOne('/api/fidelizacion/me/canjes');
       expect(r.request.headers.get('Idempotency-Key')).not.toBe(req.request.headers.get('Idempotency-Key')); r.flush({}); await next;
@@ -119,7 +135,6 @@ describe('Reward and recommendation API / UI contracts (mock HTTP, not Azure bro
     const f = TestBed.createComponent(FazcoinsComponent); f.detectChanges(); walletRead();
     const p = f.componentInstance.canjear('faz-vip'); const r = http.expectOne('/api/fidelizacion/me/canjes');
     expect(f.componentInstance.ocupado()).toBe(true); r.flush({}); await p; walletRead(); f.detectChanges();
-    expect(f.nativeElement.textContent).toContain('Recompensa digital canjeada');
-    expect(f.nativeElement.textContent).toContain('total del pedido no cambia');
+    expect(f.nativeElement.textContent).toContain('Recompensa canjeada.');
   });
 });

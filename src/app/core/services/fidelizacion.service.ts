@@ -7,8 +7,10 @@ import { firstValueFrom, timeout } from 'rxjs';
 export interface Saldo { saldo: number; disponible: number; deuda: number; simulacion: true; }
 export interface Recompensa { id: string; nombre: string; costo: number; }
 export interface Movimiento {
-  id?: string; tipo?: string; cantidad?: number; importe?: number;
-  descripcion?: string; creadoEn?: string; [key: string]: unknown;
+  id: string;
+  tipo: string;
+  monedas: number;
+  creadoEn: string;
 }
 @Injectable({ providedIn: 'root' })
 export class FidelizacionService {
@@ -38,9 +40,9 @@ export class FidelizacionService {
     } catch (error) {
       const status = (error as { status?: number }).status;
       if (status === 422 || status === 409) this.pendiente = undefined;
-      throw new Error(status === 422 ? 'FazCoins insuficientes (422).'
-        : status === 409 ? 'Conflicto de canje (409). Actualiza el saldo.'
-        : 'Canje sin confirmar. Reintentar reutiliza la misma recompensa, cantidad y clave.');
+      throw new Error(status === 422 ? 'No tienes FazCoins suficientes para este canje.'
+        : status === 409 ? 'Actualiza tu saldo antes de volver a canjear.'
+        : 'El canje sigue sin confirmar. Vuelve a intentarlo para comprobar la misma recompensa.');
     } finally { this.ocupado = false; }
   }
 }

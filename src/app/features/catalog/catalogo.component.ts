@@ -161,10 +161,10 @@ export class CatalogoComponent implements OnInit {
 
   private mensajeError(failure: unknown): string {
     if (failure instanceof HttpErrorResponse) {
-      if (failure.status === 401) return 'Vuelve a iniciar sesión para consultar el catálogo (HTTP 401).';
-      if (failure.status === 403) return 'La cuenta actual no tiene acceso al catálogo (HTTP 403).';
+      if (failure.status === 401) return 'Vuelve a iniciar sesión para consultar el catálogo.';
+      if (failure.status === 403) return 'La cuenta actual no tiene acceso al catálogo.';
       if (failure.status >= 500) {
-        return `El servicio de catálogo está temporalmente indisponible (HTTP ${failure.status}).`;
+        return 'El catálogo no está disponible por el momento. Intenta de nuevo.';
       }
       if (failure.status === 0) return 'No se recibió respuesta. Comprueba tu conexión y reintenta.';
     }

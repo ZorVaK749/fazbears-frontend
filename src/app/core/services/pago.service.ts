@@ -93,7 +93,7 @@ export class PagoService {
       }
       if (pago.estado !== 'APPROVED') {
         throw new Error(pago.estado === 'BLOCKED'
-          ? 'Pago simulado bloqueado (429). No se confirmó ningún pedido.'
+          ? 'Pago simulado bloqueado por demasiados intentos. No se confirmó ningún pedido.'
           : 'Pago simulado rechazado. No se confirmó ningún pedido.');
       }
       const resultado = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
@@ -107,7 +107,7 @@ export class PagoService {
       return resultado;
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
-        throw new Error(`No se pudo confirmar la operación (${error.status || 'Red'}). Reintentar conserva la cotización, el instrumento y las claves originales; no inicia otro pago.`);
+        throw new Error('No pudimos confirmar el pago. Vuelve a intentarlo desde este checkout.');
       }
       throw error;
     } finally { this.ocupado = false; }
