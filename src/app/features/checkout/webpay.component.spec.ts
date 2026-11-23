@@ -2,8 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { MsalService } from '@azure/msal-angular';
 import { vi } from 'vitest';
 import { API_BASE_URL } from '../../core/api.config';
+import { AZURE_TENANT_ID } from '../../core/auth/auth.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { WebpayComponent } from './webpay.component';
 import { WEBPAY_CART_REFERENCE, WEBPAY_PENDING_PAYMENT } from './webpay-session';
@@ -41,6 +43,92 @@ describe('Webpay integration return', () => {
   const pagoAprobado = { pagoId: paymentId, operacionId: 'op-1', estado: 'APPROVED', importe: 12990,
     moneda: 'CLP', simulacion: false };
   const referencia = { pagoId: paymentId, usuarioId: 'owner', tenantId: 'tenant', revisionCompra: 'a'.repeat(64) };
+
+  it.each([false, true])('preserves the quoted cart revision across the Webpay return (cart edited after retryable error: %s)', async edited => {
+    const snapshot = { fragment: null, queryParamMap: convertToParamMap({}) };
+    const account = { homeAccountId: 'home-owner', localAccountId: 'owner', tenantId: AZURE_TENANT_ID };
+    const owner = { usuarioId: 'owner', tenantId: AZURE_TENANT_ID };
+    const revisionCompra = 'a'.repeat(64);
+    const items = [{ id: 8, productoId: 7, nombreProducto: 'Pizza', cantidad: 1, precioUnitario: 12990 }];
+    const changedCart = { ...owner, items: [{ ...items[0], cantidad: 2 }], revisionCompra: 'b'.repeat(64) };
+    TestBed.configureTestingModule({
+      imports: [WebpayComponent],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(),
+        { provide: API_BASE_URL, useValue: '/api' },
+        { provide: MsalService, useValue: { instance: { getActiveAccount: () => account } } },
+        { provide: ActivatedRoute, useValue: { snapshot } },
+      ],
+    });
+    const cart = TestBed.inject(CarritoService);
+    const http = TestBed.inject(HttpTestingController);
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => {});
+    const initial = TestBed.createComponent(WebpayComponent);
+    initial.detectChanges();
+    http.expectOne('/api/pagos/webpay/capacidad').flush({});
+    try {
+      let start = initial.componentInstance.iniciar();
+      await turno();
+      http.expectOne('/api/carrito/me').flush(owner);
+      await turno();
+      http.expectOne('/api/carrito/owner').flush({ ...owner, items, revisionCompra });
+      await turno();
+      const quote = http.expectOne('/api/orden/cotizaciones');
+      expect(quote.request.body).toEqual({ items: [{ productoId: 7, cantidad: 1 }] });
+      quote.flush({ operacionId: 'op-1', ownerId: owner.usuarioId, tenantId: owner.tenantId });
+      await turno();
+      let beginPayment = http.expectOne('/api/pagos/webpay');
+      if (edited) {
+        const key = beginPayment.request.headers.get('Idempotency-Key');
+        beginPayment.flush(null, { status: 503, statusText: 'Unavailable' });
+        await start;
+        cart.cambiarCantidad(7, 2);
+        await turno();
+        http.expectOne('/api/carrito/owner/items').flush(changedCart);
+        start = initial.componentInstance.iniciar();
+        await turno();
+        http.expectNone('/api/orden/cotizaciones');
+        beginPayment = http.expectOne('/api/pagos/webpay');
+        expect(beginPayment.request.headers.get('Idempotency-Key')).toBe(key);
+      }
+      const token = 'syntheticwebpaytoken000000';
+      beginPayment.flush({ pagoId: paymentId, token,
+        url: 'https://webpay3gint.transbank.cl/webpayserver/initTransaction' });
+      await start;
+      expect(submit).toHaveBeenCalledOnce();
+      expect(JSON.parse(sessionStorage.getItem(WEBPAY_CART_REFERENCE)!)).toEqual({ ...owner, pagoId: paymentId, revisionCompra });
+      initial.destroy();
+      cart.cerrarSesion();
+
+      snapshot.queryParamMap = convertToParamMap({ token_ws: token });
+      const returned = TestBed.createComponent(WebpayComponent);
+      returned.detectChanges();
+      http.expectOne('/api/pagos/webpay/retorno').flush(pagoAprobado);
+      await turno();
+      http.expectOne('/api/orden/confirmar-pago').flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
+      await turno();
+      http.expectOne('/api/carrito/me').flush(owner);
+      await turno();
+      const currentCart = edited ? changedCart : { ...owner, items, revisionCompra };
+      http.expectOne('/api/carrito/owner').flush(currentCart);
+      await turno();
+      http.expectOne('/api/carrito/owner').flush(currentCart);
+      await turno();
+      if (edited) {
+        http.expectNone(request => request.method === 'DELETE');
+      } else {
+        const cleanup = http.expectOne(`/api/carrito/owner/items/comprados?revision=${revisionCompra}`);
+        expect(cleanup.request.method).toBe('DELETE');
+        cleanup.flush({ ...owner, items: [] });
+        await turno();
+      }
+      expect(cart.cantidadItems).toBe(edited ? 2 : 0);
+      expect(returned.componentInstance.pedido()).toBe(31);
+      expect(returned.componentInstance.revisarCarrito()).toBe(edited);
+      http.verify();
+    } finally {
+      submit.mockRestore();
+    }
+  });
 
   it('reconciles a cancelled form return without confirming an order', async () => {
     sessionStorage.setItem(WEBPAY_CART_REFERENCE, JSON.stringify(referencia));

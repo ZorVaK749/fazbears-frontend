@@ -4,7 +4,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TimeoutError, firstValueFrom, timeout, timer } from 'rxjs';
 import { API_BASE_URL } from '../../core/api.config';
-import { CarritoService } from '../../core/services/carrito.service';
+import { CarritoParaConfirmar, CarritoService } from '../../core/services/carrito.service';
 import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
 import { ClpPipe } from '../../shared/clp.pipe';
 import { WEBPAY_CART_REFERENCE, WEBPAY_PENDING_PAYMENT } from './webpay-session';
@@ -71,7 +71,7 @@ export class WebpayComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly cart = inject(CarritoService);
   private readonly destroy = inject(DestroyRef);
-  private quote?: Cotizacion;
+  private intento?: { carrito: CarritoParaConfirmar; cotizacion?: Cotizacion };
   private readonly quoteKey = crypto.randomUUID();
   private readonly paymentKey = crypto.randomUUID();
   readonly ocupado = signal(false);
@@ -113,15 +113,21 @@ export class WebpayComponent implements OnInit {
     if (this.ocupado() || this.pendiente() || this.retorno || this.cerrado()) return;
     this.ocupado.set(true);
     try {
-      const snapshot = await this.cart.prepararCheckout();
-      if (this.destroy.destroyed || !this.cart.snapshotVigente(snapshot)) throw new Error();
-      this.quote ??= await this.post<Cotizacion>('/orden/cotizaciones', {
+      if (!this.intento) {
+        const carrito = await this.cart.prepararCheckout();
+        if (this.destroy.destroyed || !this.cart.snapshotVigente(carrito)) throw new Error();
+        this.intento = { carrito };
+      }
+      const intento = this.intento;
+      const snapshot = intento.carrito;
+      if (!this.cart.mismaSesion(snapshot)) throw new Error();
+      const cotizacion = intento.cotizacion ??= await this.post<Cotizacion>('/orden/cotizaciones', {
         items: snapshot.items.map(item => ({ productoId: item.productoId, cantidad: item.cantidad })),
       }, this.quoteKey);
       if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot)
-          || this.quote.ownerId !== snapshot.usuarioId || this.quote.tenantId !== snapshot.tenantId) throw new Error();
+          || cotizacion.ownerId !== snapshot.usuarioId || cotizacion.tenantId !== snapshot.tenantId) throw new Error();
       const redirect = await this.post<{ pagoId: string; token: string; url: string }>('/pagos/webpay', {
-        operacionId: this.quote.operacionId,
+        operacionId: cotizacion.operacionId,
       }, this.paymentKey);
       if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot) || redirect.url !== FORM
           || !/^[A-Za-z0-9]{20,128}$/.test(redirect.token)) throw new Error();
