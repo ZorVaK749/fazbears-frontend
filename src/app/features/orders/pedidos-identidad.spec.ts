@@ -123,6 +123,36 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
     expect(orders.componentInstance.formatFecha('inválida')).toBe('—');
   });
 
+  it('abre un comprobante por pedido con el medio registrado y el desglose en CLP', async () => {
+    const { orders } = createBoth();
+    await identity();
+    http.expectOne(`${API}/pedidos/usuario/${A}`).flush([
+      { ...pedido(A, 65), estado: 'CANCELADO', paymentStatus: 'APPROVED_WEBPAY_INTEGRATION', total: 11990,
+        items: [{ ...pedido().items[0], cantidad: 2, precioUnitario: 5995 }] },
+      { ...pedido(A, 66), paymentStatus: 'APPROVED_SIMULATED' },
+      pedido(A, 67),
+    ]);
+    orders.detectChanges();
+    const botones: NodeListOf<HTMLButtonElement> = orders.nativeElement.querySelectorAll('.pedido-enlace');
+    botones[0].click(); orders.detectChanges();
+    const recibo = orders.nativeElement.querySelector('#comprobante-65');
+    expect(botones[0].getAttribute('aria-expanded')).toBe('true');
+    expect(recibo.textContent).toContain('Webpay de integración');
+    expect(recibo.textContent).toContain('CANCELADO');
+    expect(recibo.textContent).toMatch(/2 × CLP\s5\.995/);
+    expect(recibo.textContent).toMatch(/Total del pedido CLP\s11\.990/);
+
+    botones[1].click(); orders.detectChanges();
+    expect(orders.nativeElement.querySelector('#comprobante-65')).toBeNull();
+    expect(orders.nativeElement.querySelector('#comprobante-66').textContent).toContain('Pago simulado');
+
+    botones[2].click(); orders.detectChanges();
+    expect(orders.nativeElement.querySelector('#comprobante-67').textContent).toContain('Sin información de pago');
+    botones[2].click(); orders.detectChanges();
+    expect(orders.nativeElement.querySelector('.comprobante')).toBeNull();
+    http.expectNone(() => true);
+  });
+
   it('cambio de cuenta vacía datos y cancela consulta de A antes de consultar B', async () => {
     const { perfil, orders } = createBoth(); await identity();
     const old = http.expectOne(`${API}/pedidos/usuario/${A}`);
@@ -139,10 +169,15 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
   it('una respuesta de pedidos ya entregada no queda visible tras cambio de cuenta', async () => {
     const { perfil, orders } = createBoth(); await identity();
     http.expectOne(`${API}/pedidos/usuario/${A}`).flush([pedido()]);
+    orders.detectChanges();
+    orders.nativeElement.querySelector('.pedido-enlace').click(); orders.detectChanges();
+    expect(orders.nativeElement.querySelector('.comprobante')).not.toBeNull();
     active = account('b'); const init = carrito.inicializar();
     expect(perfil.componentInstance.misPedidos).toEqual([]);
     expect(orders.componentInstance.pedidosFiltrados).toEqual([]);
     await load(B); await init;
+    orders.detectChanges();
+    expect(orders.nativeElement.querySelector('.comprobante')).toBeNull();
   });
 
   it('sin JWT/identidad frontend no consulta pedidos y muestra error de /me sin fallback', async () => {

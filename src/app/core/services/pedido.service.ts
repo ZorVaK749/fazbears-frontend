@@ -19,6 +19,7 @@ export interface Pedido {
   fechaCreacion?: string;
   total?: number;
   estado?: EstadoPedido;
+  paymentStatus?: string | null;
   items: ItemPedido[];
 }
 

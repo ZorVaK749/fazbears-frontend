@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Pedido } from '../../core/services/pedido.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
@@ -35,7 +35,16 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
           @for (pedido of pedidosFiltrados; track pedido.id) {
             <li class="pedido">
               <div>
-                <h2>Pedido #{{ pedido.id }}</h2>
+                <h2>
+                  @if (pedido.id) {
+                    <button type="button" class="pedido-enlace" [attr.aria-expanded]="abierto(pedido)"
+                            [attr.aria-controls]="abierto(pedido) ? 'comprobante-' + pedido.id : null"
+                            (click)="alternarComprobante(pedido)">
+                      <span>Pedido #{{ pedido.id }}</span>
+                      <span class="pedido-enlace-texto">{{ abierto(pedido) ? 'Cerrar comprobante' : 'Ver comprobante' }}</span>
+                    </button>
+                  } @else { Pedido }
+                </h2>
                 <p class="fecha">{{ formatFecha(pedido.fechaCreacion) }}</p>
                 <span class="estado-pedido" [class]="badgeClass(pedido.estado)">{{ pedido.estado || 'Pendiente' }}</span>
               </div>
@@ -53,6 +62,25 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
                   </button>
                 }
               </div>
+              @if (abierto(pedido)) {
+                <section class="comprobante" [id]="'comprobante-' + pedido.id" [attr.aria-labelledby]="'titulo-comprobante-' + pedido.id">
+                  <h3 [id]="'titulo-comprobante-' + pedido.id">Comprobante del pedido #{{ pedido.id }}</h3>
+                  <dl class="comprobante-datos">
+                    <div><dt>Fecha del pedido</dt><dd>{{ formatFecha(pedido.fechaCreacion) }}</dd></div>
+                    <div><dt>Estado del pedido</dt><dd>{{ pedido.estado || 'Pendiente' }}</dd></div>
+                    <div><dt>Medio de pago registrado</dt><dd>{{ medioDePago(pedido.paymentStatus) }}</dd></div>
+                  </dl>
+                  <ul class="productos" aria-label="Detalle de importes">
+                    @for (item of pedido.items; track $index) {
+                      <li>
+                        <div><span>{{ item.nombreProducto }}</span><small>{{ item.cantidad }} × {{ item.precioUnitario | clp }}</small></div>
+                        <strong>{{ item.cantidad * item.precioUnitario | clp }}</strong>
+                      </li>
+                    }
+                  </ul>
+                  <p class="comprobante-total">Total del pedido <strong>{{ pedido.total | clp }}</strong></p>
+                </section>
+              }
             </li>
           }
         </ul>
@@ -70,6 +98,9 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
     .lista { display: grid; gap: .8rem; margin-block-start: 1rem; }
     .pedido { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr) auto; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid var(--fnaf-border); border-radius: .45rem; background: var(--fnaf-surface); }
     h2 { color: var(--fnaf-cyan); font-size: 1.25rem; line-height: 1.2; letter-spacing: 0; }
+    .pedido-enlace { display: grid; gap: .2rem; justify-items: start; min-height: 2.75rem; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .pedido-enlace-texto { color: var(--fnaf-text); text-decoration: underline; font: 600 .9rem var(--font-body); }
+    .pedido-enlace:focus-visible { outline: 2px solid var(--fnaf-yellow); outline-offset: 3px; }
     .fecha { margin: .25rem 0 .4rem; }
     .estado-pedido { display: inline-block; padding: .15rem .45rem; border: 1px solid currentColor; border-radius: .3rem; font-size: .8rem; text-transform: capitalize; }
     .badge-PENDIENTE { color: var(--fnaf-yellow); }
@@ -81,6 +112,14 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
     .resumen { display: grid; gap: .55rem; justify-items: end; }
     .resumen strong { color: var(--fnaf-text); white-space: nowrap; font-size: 1.15rem; }
     .cancelar { color: #ff9aab; border-color: #b85b71; }
+    .comprobante { grid-column: 1 / -1; min-width: 0; padding: 1rem; border: 1px solid var(--fnaf-border); border-radius: .35rem; background: var(--fnaf-bg); }
+    .comprobante h3 { color: var(--fnaf-cyan); font-size: 1.15rem; }
+    .comprobante-datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .65rem 1rem; margin-block: .8rem; }
+    .comprobante-datos dt, .comprobante small { color: #b5b5cb; }
+    .comprobante-datos dd { margin: 0; }
+    .comprobante small { display: block; }
+    .comprobante strong { flex-shrink: 0; }
+    .comprobante-total { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .3rem .75rem; margin-block-start: .85rem; }
     @media (max-width: 42rem) {
       .pedido { grid-template-columns: 1fr; gap: .75rem; }
       .resumen { grid-template-columns: 1fr auto; align-items: center; justify-items: start; }
@@ -90,6 +129,7 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
 })
 export class OrdersComponent implements OnInit {
   private readonly misPedidosSvc = inject(MisPedidosService);
+  private readonly comprobante = signal<{ id: number; usuarioId: string } | null>(null);
   readonly esAdmin = false;
   get cargando() { return this.misPedidosSvc.cargando(); }
   get procesando() { return this.misPedidosSvc.procesando(); }
@@ -99,6 +139,24 @@ export class OrdersComponent implements OnInit {
   ngOnInit() { this.misPedidosSvc.inicializar(); }
   cancelarPedido(pedido: Pedido) { this.misPedidosSvc.cancelar(pedido); }
   actualizar() { this.misPedidosSvc.actualizar(); }
+
+  abierto(pedido: Pedido): boolean {
+    const comprobante = this.comprobante();
+    return comprobante !== null && comprobante.id === pedido.id && comprobante.usuarioId === pedido.usuarioId;
+  }
+
+  alternarComprobante(pedido: Pedido): void {
+    if (!pedido.id) return;
+    this.comprobante.set(this.abierto(pedido) ? null : { id: pedido.id, usuarioId: pedido.usuarioId });
+  }
+
+  medioDePago(estado?: string | null): string {
+    switch (estado) {
+      case 'APPROVED_WEBPAY_INTEGRATION': return 'Webpay de integración';
+      case 'APPROVED_SIMULATED': return 'Pago simulado';
+      default: return 'Sin información de pago';
+    }
+  }
 
   readonly formatFecha = formatearFechaSantiago;
 
