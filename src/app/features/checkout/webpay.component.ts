@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { ConfirmacionPago, Cotizacion } from '../../core/services/pago.service';
 import { ClpPipe } from '../../shared/clp.pipe';
-import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
+import { WEBPAY_CART_REFERENCE, WEBPAY_PENDING_PAYMENT } from './webpay-session';
 
 const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
 const RECHECK_DELAYS_MS = [1500, 3000, 5000];
@@ -16,6 +16,7 @@ interface PagoWebpay {
   pagoId: string; operacionId: string; estado: string; importe: number;
   moneda: string; simulacion: boolean;
 }
+interface CarritoWebpay { pagoId: string; usuarioId: string; tenantId: string; revisionCompra: string; }
 
 @Component({
   standalone: true,
@@ -28,6 +29,9 @@ interface PagoWebpay {
           <h1 id="webpay-receipt" class="pixel text-neon-cyan">Pago efectuado</h1>
           <p>Pedido #{{ pedidoId }} confirmado por Webpay de integración.</p>
           <dl class="receipt-total"><dt>Total pagado</dt><dd>{{ total() | clp }}</dd></dl>
+          @if (revisarCarrito()) {
+            <p>Revisa el contenido del carrito antes de iniciar otra compra.</p>
+          }
           <div class="payment-actions">
             <a class="payment-action payment-action--primary" routerLink="/checkout">Volver al checkout</a>
             <a class="payment-action" routerLink="/pedidos">Ver mis pedidos</a>
@@ -76,6 +80,7 @@ export class WebpayComponent implements OnInit {
   readonly pedido = signal<number | null>(null);
   readonly total = signal<number | null>(null);
   readonly cerrado = signal(false);
+  readonly revisarCarrito = signal(false);
   readonly mensaje = signal('Comprobando disponibilidad…');
   readonly pendiente = signal(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT));
   retorno?: Retorno;
@@ -120,6 +125,12 @@ export class WebpayComponent implements OnInit {
       }, this.paymentKey);
       if (this.destroy.destroyed || !this.cart.mismaSesion(snapshot) || redirect.url !== FORM
           || !/^[A-Za-z0-9]{20,128}$/.test(redirect.token)) throw new Error();
+      sessionStorage.removeItem(WEBPAY_CART_REFERENCE);
+      if (snapshot.revisionCompra) {
+        const carrito: CarritoWebpay = { pagoId: redirect.pagoId, usuarioId: snapshot.usuarioId,
+          tenantId: snapshot.tenantId, revisionCompra: snapshot.revisionCompra };
+        sessionStorage.setItem(WEBPAY_CART_REFERENCE, JSON.stringify(carrito));
+      }
       sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, redirect.pagoId);
       this.pendiente.set(redirect.pagoId);
       const form = document.createElement('form');
@@ -168,6 +179,7 @@ export class WebpayComponent implements OnInit {
         if (this.destroy.destroyed) return;
         if (!Number.isSafeInteger(pedido.pedidoId) || pedido.pedidoId < 1 || pedido.simulacion !== false || pedido.pagoId !== pago.pagoId
             || pedido.total !== pago.importe) throw new Error();
+        this.revisarCarrito.set(!await this.actualizarCarrito(pago.pagoId));
         this.total.set(pedido.total);
         this.pedido.set(pedido.pedidoId);
         this.clear();
@@ -223,6 +235,19 @@ export class WebpayComponent implements OnInit {
     this.retorno = undefined;
     this.pendiente.set(null);
     sessionStorage.removeItem(WEBPAY_PENDING_PAYMENT);
+    sessionStorage.removeItem(WEBPAY_CART_REFERENCE);
+  }
+
+  private async actualizarCarrito(pagoId: string): Promise<boolean> {
+    try {
+      const referencia = JSON.parse(sessionStorage.getItem(WEBPAY_CART_REFERENCE) ?? 'null') as CarritoWebpay | null;
+      if (referencia?.pagoId !== pagoId || typeof referencia.usuarioId !== 'string'
+          || typeof referencia.tenantId !== 'string' || typeof referencia.revisionCompra !== 'string'
+          || !/^[a-f0-9]{64}$/.test(referencia.revisionCompra)) return false;
+      return await this.cart.limpiarTrasWebpay(referencia, referencia.revisionCompra);
+    } catch {
+      return false;
+    }
   }
 
   private post<T>(path: string, body: unknown, key?: string): Promise<T> {

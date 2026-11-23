@@ -53,6 +53,35 @@ describe('Carrito persistido EV3: FIFO, sesiones y fallos', () => {
     expect(await servicio.sincronizado()).toBe(true);
   });
 
+  it('sincroniza el carrito pagado y actualiza el contador con la respuesta del MS', async () => {
+    const revision = 'a'.repeat(64);
+    await cargar();
+    const limpieza = servicio.limpiarTrasWebpay({ usuarioId: 'a', tenantId: AZURE_TENANT_ID }, revision);
+    await turno();
+    http.expectOne(`${BASE}/a`).flush({ ...dto(), revisionCompra: revision });
+    await turno();
+    const borrar = http.expectOne(`${BASE}/a/items/comprados?revision=${revision}`);
+    expect(borrar.request.method).toBe('DELETE');
+    expect(servicio.cantidadItems).toBe(1);
+    borrar.flush(dto('a', 0));
+    expect(await limpieza).toBe(true);
+    expect(servicio.cantidadItems).toBe(0);
+  });
+
+  it('conserva y recarga los artículos cuando cambia el carrito en otra pestaña', async () => {
+    const revision = 'a'.repeat(64);
+    await cargar();
+    const limpieza = servicio.limpiarTrasWebpay({ usuarioId: 'a', tenantId: AZURE_TENANT_ID }, revision);
+    await turno();
+    http.expectOne(`${BASE}/a`).flush({ ...dto(), revisionCompra: revision });
+    await turno();
+    http.expectOne(`${BASE}/a/items/comprados?revision=${revision}`).flush(null, { status: 409, statusText: 'Conflict' });
+    await turno();
+    http.expectOne(`${BASE}/a`).flush({ ...dto('a', 2), revisionCompra: 'b'.repeat(64) });
+    expect(await limpieza).toBe(false);
+    expect(servicio.cantidadItems).toBe(2);
+  });
+
   it('una instancia nueva recupera el carrito remoto sin depender de memoria del frontend', async () => {
     await cargar(2);
     const nueva = TestBed.runInInjectionContext(() => new CarritoService());

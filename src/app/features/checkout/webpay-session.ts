@@ -1,2 +1,3 @@
-/** Only the public payment ID is kept across visits to the checkout. */
+/** The checkout keeps the public payment ID and its cart reference across the provider redirect. */
 export const WEBPAY_PENDING_PAYMENT = 'pedidos360.webpay.paymentId';
+export const WEBPAY_CART_REFERENCE = 'pedidos360.webpay.cartReference';

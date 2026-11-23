@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MsalService } from '@azure/msal-angular';
 import { AccountInfo } from '@azure/msal-browser';
 import { Observable, Subject, firstValueFrom, takeUntil, timeout } from 'rxjs';
@@ -16,7 +16,7 @@ export interface ItemCarrito {
   precioVigente?: boolean;
 }
 
-export interface CarritoState { items: ItemCarrito[]; total: number; }
+export interface CarritoState { items: ItemCarrito[]; total: number; revisionCompra?: string; }
 
 export interface IdentidadCarrito { usuarioId: string; tenantId: string; }
 export interface IdentidadSesion extends IdentidadCarrito { sesion: number; }
@@ -208,6 +208,35 @@ export class CarritoService {
     if (this.snapshotVigente(snapshot)) this.vaciar();
   }
 
+  async limpiarTrasWebpay(owner: IdentidadCarrito, revisionCompra: string): Promise<boolean> {
+    const sesion = this.contexto();
+    if (!sesion || !await this.sincronizado() || !this.esActual(sesion)
+        || sesion.identidad?.usuarioId !== owner.usuarioId || sesion.identidad.tenantId !== owner.tenantId) {
+      return false;
+    }
+    let limpio = false;
+    sesion.revision++;
+    await this.encolar(sesion, async () => {
+      // Leer el carrito vigente tras volver de Transbank y usar un DELETE condicional en el MS.
+      await this.cargar(sesion);
+      if (!this.esActual(sesion)) return;
+      if (!this.carrito().items.length) { limpio = true; return; }
+      if (this.carrito().revisionCompra !== revisionCompra) return;
+      try {
+        const respuesta = await this.pedir(sesion, this.http.delete<unknown>(`${this.url(sesion)}/items/comprados`, {
+          params: { revision: revisionCompra },
+        }));
+        this.aplicar(respuesta, sesion);
+        limpio = !this.carrito().items.length;
+      } catch (error) {
+        if (!(error instanceof HttpErrorResponse && error.status === 409)) throw error;
+        // Otra pestaña modificó el carrito entre el GET y el DELETE.
+        await this.cargar(sesion);
+      }
+    }, true);
+    return this.esActual(sesion) && limpio;
+  }
+
   private contexto(): SesionCarrito | null {
     const cuenta = this.cuentaActual();
     const clave = cuenta ? `${cuenta.homeAccountId}|${cuenta.localAccountId}|${cuenta.tenantId}` : null;
@@ -308,7 +337,7 @@ export class CarritoService {
 
   private aplicar(respuesta: unknown, sesion: SesionCarrito): void {
     if (!this.esActual(sesion)) return;
-    const dto = respuesta as { usuarioId?: unknown; items?: unknown } | null;
+    const dto = respuesta as { usuarioId?: unknown; items?: unknown; revisionCompra?: unknown } | null;
     if (!dto || !sesion.identidad || dto.usuarioId !== sesion.identidad.usuarioId || !Array.isArray(dto.items)) {
       throw new Error('Respuesta de carrito incompatible');
     }
@@ -330,7 +359,10 @@ export class CarritoService {
     });
     const total = items.reduce((suma, item) => suma + item.precioUnitario * item.cantidad, 0);
     if (!Number.isFinite(total)) throw new Error('Total incompatible');
-    this.estado.set({ items, total });
+    const revision = dto.revisionCompra;
+    this.estado.set({ items, total,
+      ...(typeof revision === 'string' && /^[a-f0-9]{64}$/.test(revision) ? { revisionCompra: revision } : {}),
+    });
   }
 
   private enteroPositivo(valor: number): boolean {

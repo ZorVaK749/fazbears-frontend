@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 import { API_BASE_URL } from '../../core/api.config';
 import { CarritoService } from '../../core/services/carrito.service';
 import { WebpayComponent } from './webpay.component';
-import { WEBPAY_PENDING_PAYMENT } from './webpay-session';
+import { WEBPAY_CART_REFERENCE, WEBPAY_PENDING_PAYMENT } from './webpay-session';
 
 describe('Webpay integration return', () => {
   const paymentId = '42ff2362-6631-4a0b-9ba2-07d1193fa61d';
@@ -14,18 +14,20 @@ describe('Webpay integration return', () => {
   afterEach(() => {
     vi.useRealTimers();
     sessionStorage.removeItem(WEBPAY_PENDING_PAYMENT);
+    sessionStorage.removeItem(WEBPAY_CART_REFERENCE);
   });
 
   const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
   function setup(fragment: string | null = null) {
+    const cart = { limpiarTrasWebpay: vi.fn().mockResolvedValue(true) };
     const snapshot = { fragment, queryParamMap: convertToParamMap(fragment ? {} : { token_ws: 'provider-reference-for-test' }) };
     TestBed.configureTestingModule({
       imports: [WebpayComponent],
       providers: [
         provideRouter([]), provideHttpClient(), provideHttpClientTesting(),
         { provide: API_BASE_URL, useValue: '/api' },
-        { provide: CarritoService, useValue: {} },
+        { provide: CarritoService, useValue: cart },
         { provide: ActivatedRoute, useValue: { snapshot } },
       ],
     });
@@ -33,26 +35,30 @@ describe('Webpay integration return', () => {
     const http = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
     http.expectNone('/api/pagos/webpay/capacidad');
-    return { fixture, http, snapshot };
+    return { fixture, http, snapshot, cart };
   }
 
   const pagoAprobado = { pagoId: paymentId, operacionId: 'op-1', estado: 'APPROVED', importe: 12990,
     moneda: 'CLP', simulacion: false };
+  const referencia = { pagoId: paymentId, usuarioId: 'owner', tenantId: 'tenant', revisionCompra: 'a'.repeat(64) };
 
   it('reconciles a cancelled form return without confirming an order', async () => {
-    const { fixture, http } = setup('TBK_TOKEN=cancelled-test-reference&TBK_ORDEN_COMPRA=test-order&TBK_ID_SESION=test-session');
+    sessionStorage.setItem(WEBPAY_CART_REFERENCE, JSON.stringify(referencia));
+    const { fixture, http, cart } = setup('TBK_TOKEN=cancelled-test-reference&TBK_ORDEN_COMPRA=test-order&TBK_ID_SESION=test-session');
     const verify = http.expectOne('/api/pagos/webpay/retorno');
     expect(verify.request.body).toEqual({ tokenWs: null, tbkToken: 'cancelled-test-reference',
       buyOrder: 'test-order', sessionId: 'test-session' });
     verify.flush({ ...pagoAprobado, estado: 'DECLINED' });
     await turno();
     expect(fixture.componentInstance.cerrado()).toBe(true);
+    expect(cart.limpiarTrasWebpay).not.toHaveBeenCalled();
     http.expectNone('/api/orden/confirmar-pago');
     http.verify();
   });
 
   it('requests order confirmation only after server approval of the provider return', async () => {
-    const { fixture, http } = setup();
+    sessionStorage.setItem(WEBPAY_CART_REFERENCE, JSON.stringify(referencia));
+    const { fixture, http, cart } = setup();
     const verify = http.expectOne('/api/pagos/webpay/retorno');
     expect(verify.request.body.tokenWs).toBe('provider-reference-for-test');
     http.expectNone('/api/orden/confirmar-pago');
@@ -63,6 +69,7 @@ describe('Webpay integration return', () => {
     expect(confirm.request.headers.get('Idempotency-Key')).toBe(`webpay-${paymentId}`);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#webpay-receipt')).toBeNull();
+    expect(cart.limpiarTrasWebpay).not.toHaveBeenCalled();
     confirm.flush({ pedidoId: 31, pagoId: paymentId, total: 12990, simulacion: false });
     await turno();
     fixture.detectChanges();
@@ -71,6 +78,8 @@ describe('Webpay integration return', () => {
     expect(fixture.nativeElement.querySelector('.receipt').textContent).toContain('Pedido #31');
     expect(fixture.nativeElement.querySelector('.receipt a[href="/checkout"]').textContent).toContain('Volver al checkout');
     expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
+    expect(sessionStorage.getItem(WEBPAY_CART_REFERENCE)).toBeNull();
+    expect(cart.limpiarTrasWebpay).toHaveBeenCalledExactlyOnceWith(referencia, referencia.revisionCompra);
     http.verify();
   });
 
