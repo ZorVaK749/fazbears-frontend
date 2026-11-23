@@ -11,6 +11,7 @@ import { WEBPAY_CART_REFERENCE, WEBPAY_PENDING_PAYMENT } from './webpay-session'
 
 const FORM = 'https://webpay3gint.transbank.cl/webpayserver/initTransaction';
 const RECHECK_DELAYS_MS = [1500, 3000, 5000];
+const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 interface Retorno { tokenWs: string | null; tbkToken: string | null; buyOrder: string | null; sessionId: string | null; }
 interface PagoWebpay {
   pagoId: string; operacionId: string; estado: string; importe: number;
@@ -43,7 +44,7 @@ interface CarritoWebpay { pagoId: string; usuarioId: string; tenantId: string; r
           <p role="status" aria-live="polite" class="payment-message">{{ mensaje() }}</p>
           <div class="payment-actions">
             @if (disponible() && !cerrado() && !verificando()) {
-              @if (retorno || pendiente()) {
+              @if (retorno || pendiente() || pagoParaRecuperar) {
                 <button type="button" class="payment-action payment-action--primary" (click)="retomar()">Verificar el mismo pago</button>
               } @else {
                 <button type="button" class="payment-action payment-action--primary" [disabled]="ocupado()" (click)="iniciar()">Ir a Webpay</button>
@@ -84,6 +85,7 @@ export class WebpayComponent implements OnInit {
   readonly mensaje = signal('Comprobando disponibilidad…');
   readonly pendiente = signal(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT));
   retorno?: Retorno;
+  protected pagoParaRecuperar: string | null = null;
 
   async ngOnInit() {
     const { fragment, queryParamMap } = this.route.snapshot;
@@ -93,6 +95,20 @@ export class WebpayComponent implements OnInit {
     if (Object.values(fields).some(Boolean)) {
       this.retorno = fields;
       window.history.replaceState(window.history.state, '', window.location.pathname);
+    } else if (queryParamMap.has('recuperar')) {
+      const pagoId = queryParamMap.get('recuperar')?.toLowerCase();
+      if (!pagoId || !UUID.test(pagoId)) {
+        this.mensaje.set('La referencia del pago no es válida.');
+        return;
+      }
+      if (this.pendiente() && this.pendiente() !== pagoId) {
+        this.mensaje.set('Esta pestaña tiene otro pago pendiente. Vuelve al checkout para revisarlo.');
+        return;
+      }
+      this.pagoParaRecuperar = pagoId;
+      this.disponible.set(true);
+      this.mensaje.set('Verifica este intento con la misma cuenta que inició el pago.');
+      return;
     }
     if (this.retorno || this.pendiente()) {
       this.disponible.set(true);
@@ -110,7 +126,7 @@ export class WebpayComponent implements OnInit {
   }
 
   async iniciar() {
-    if (this.ocupado() || this.pendiente() || this.retorno || this.cerrado()) return;
+    if (this.ocupado() || this.pendiente() || this.retorno || this.pagoParaRecuperar || this.cerrado()) return;
     this.ocupado.set(true);
     try {
       if (!this.intento) {
@@ -160,7 +176,7 @@ export class WebpayComponent implements OnInit {
   }
 
   async retomar() {
-    if (this.ocupado() || (!this.retorno && !this.pendiente())) return;
+    if (this.ocupado() || (!this.retorno && !this.pendiente() && !this.pagoParaRecuperar)) return;
     this.ocupado.set(true);
     this.verificando.set(true);
     this.mensaje.set('Estamos consultando el estado de tu pago en Webpay.');
@@ -177,6 +193,11 @@ export class WebpayComponent implements OnInit {
         return;
       }
       if (pago.estado === 'APPROVED') {
+        if (this.pagoParaRecuperar) {
+          this.mensaje.set('Este pago figura aprobado. Puedes revisarlo en Mis pedidos.');
+          this.cerrado.set(true);
+          return;
+        }
         aprobado = true;
         this.mensaje.set('Pago aprobado. Estamos confirmando tu pedido.');
         const pedido = await this.post<ConfirmacionPago>('/orden/confirmar-pago', {
@@ -210,7 +231,7 @@ export class WebpayComponent implements OnInit {
           { defaultValue: null });
         if (turno === null) return null;
       }
-      const id = this.pendiente();
+      const id = this.pagoParaRecuperar ?? this.pendiente();
       let pago: PagoWebpay;
       try {
         pago = this.retorno
@@ -230,8 +251,10 @@ export class WebpayComponent implements OnInit {
         throw new Error('Respuesta de pago incompatible.');
       }
       this.retorno = undefined;
-      sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, pago.pagoId);
-      this.pendiente.set(pago.pagoId);
+      if (!this.pagoParaRecuperar) {
+        sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, pago.pagoId);
+        this.pendiente.set(pago.pagoId);
+      }
       if (pago.estado !== 'PENDING' || intento === RECHECK_DELAYS_MS.length) return pago;
     }
     return null;

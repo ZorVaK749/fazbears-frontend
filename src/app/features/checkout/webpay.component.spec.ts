@@ -21,9 +21,10 @@ describe('Webpay integration return', () => {
 
   const turno = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-  function setup(fragment: string | null = null) {
+  function setup(fragment: string | null = null,
+    query: Record<string, string> = fragment ? {} : { token_ws: 'provider-reference-for-test' }) {
     const cart = { limpiarTrasWebpay: vi.fn().mockResolvedValue(true) };
-    const snapshot = { fragment, queryParamMap: convertToParamMap(fragment ? {} : { token_ws: 'provider-reference-for-test' }) };
+    const snapshot = { fragment, queryParamMap: convertToParamMap(query) };
     TestBed.configureTestingModule({
       imports: [WebpayComponent],
       providers: [
@@ -43,6 +44,36 @@ describe('Webpay integration return', () => {
   const pagoAprobado = { pagoId: paymentId, operacionId: 'op-1', estado: 'APPROVED', importe: 12990,
     moneda: 'CLP', simulacion: false };
   const referencia = { pagoId: paymentId, usuarioId: 'owner', tenantId: 'tenant', revisionCompra: 'a'.repeat(64) };
+
+  it.each(['EXPIRED', 'APPROVED'])('consults a saved attempt only after the user clicks (%s)', async estado => {
+    const { fixture, http, cart } = setup(null, { recuperar: paymentId });
+    http.expectNone(() => true);
+    const button = fixture.nativeElement.querySelector('button');
+    expect(button.textContent).toContain('Verificar el mismo pago');
+    button.click();
+    const request = http.expectOne(`/api/pagos/webpay/${paymentId}/estado`);
+    expect(request.request.method).toBe('POST');
+    request.flush({ ...pagoAprobado, estado });
+    await turno();
+    expect(fixture.componentInstance.cerrado()).toBe(true);
+    expect(fixture.componentInstance.mensaje()).toContain(estado === 'EXPIRED' ? 'venció' : 'figura aprobado');
+    expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
+    expect(cart.limpiarTrasWebpay).not.toHaveBeenCalled();
+    http.expectNone('/api/pagos/webpay');
+    http.expectNone('/api/orden/confirmar-pago');
+    http.verify();
+  });
+
+  it('preserves a different payment already pending in the tab', () => {
+    const otherPayment = '7f5da553-51ad-4f65-bc18-dde943b58708';
+    sessionStorage.setItem(WEBPAY_PENDING_PAYMENT, otherPayment);
+    const { fixture, http } = setup(null, { recuperar: paymentId });
+    expect(fixture.componentInstance.mensaje()).toContain('otro pago pendiente');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBe(otherPayment);
+    http.expectNone(() => true);
+    http.verify();
+  });
 
   it.each([false, true])('preserves the quoted cart revision across the Webpay return (cart edited after retryable error: %s)', async edited => {
     const snapshot = { fragment: null, queryParamMap: convertToParamMap({}) };
