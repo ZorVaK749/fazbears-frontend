@@ -23,6 +23,11 @@ export interface Pedido {
   items: ItemPedido[];
 }
 
+export function puedeConfirmarRecepcion(pedido: Pedido): boolean {
+  return (pedido.estado === 'PENDIENTE' || pedido.estado === 'PREPARANDO')
+    && (pedido.paymentStatus === 'APPROVED_SIMULATED' || pedido.paymentStatus === 'APPROVED_WEBPAY_INTEGRATION');
+}
+
 @Injectable({ providedIn: 'root' })
 export class PedidoService {
   private base = `${inject(API_BASE_URL)}/pedidos`;

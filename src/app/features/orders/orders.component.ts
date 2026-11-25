@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Pedido } from '../../core/services/pedido.service';
+import { Pedido, puedeConfirmarRecepcion } from '../../core/services/pedido.service';
 import { MisPedidosService } from '../../core/services/mis-pedidos.service';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { ClpPipe } from '../../shared/clp.pipe';
@@ -18,7 +18,7 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
           <p>Consulta el estado y los productos de cada pedido en pesos chilenos.</p>
         </div>
         <div class="payment-actions">
-          <button type="button" class="payment-action" [disabled]="cargando" (click)="actualizar()">Actualizar</button>
+          <button type="button" class="payment-action" [disabled]="cargando || cambiandoEstado" (click)="actualizar()">Actualizar</button>
           <a routerLink="/catalogo" class="payment-action payment-action--primary">Volver al menú</a>
         </div>
       </header>
@@ -46,7 +46,7 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
                   } @else { Pedido }
                 </h2>
                 <p class="fecha">{{ formatFecha(pedido.fechaCreacion) }}</p>
-                <span class="estado-pedido" [class]="badgeClass(pedido.estado)">{{ pedido.estado || 'Pendiente' }}</span>
+                <span class="estado-pedido" [class]="badgeClass(pedido.estado)" aria-live="polite">{{ pedido.estado || 'Pendiente' }}</span>
               </div>
               <ul class="productos" aria-label="Productos del pedido">
                 @for (item of pedido.items; track $index) {
@@ -55,11 +55,21 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
               </ul>
               <div class="resumen">
                 <p>Total <strong>{{ pedido.total | clp }}</strong></p>
-                @if (pedido.estado === 'PENDIENTE' && pedido.id) {
-                  <button type="button" id="btn-cancelar-{{ pedido.id }}" class="payment-action cancelar"
-                          [disabled]="procesando[pedido.id]" (click)="cancelarPedido(pedido)">
-                    {{ procesando[pedido.id] ? 'Cancelando…' : 'Cancelar pedido' }}
-                  </button>
+                @if (pedido.id) {
+                  <div class="pedido-acciones">
+                    @if (puedeConfirmarRecepcion(pedido)) {
+                      <button type="button" id="btn-completar-{{ pedido.id }}" class="payment-action payment-action--primary"
+                              [disabled]="!!procesando[pedido.id]" (click)="confirmarRecepcion(pedido)">
+                        {{ procesando[pedido.id] === 'COMPLETADO' ? 'Confirmando…' : 'Confirmar recepción' }}
+                      </button>
+                    }
+                    @if (pedido.estado === 'PENDIENTE') {
+                      <button type="button" id="btn-cancelar-{{ pedido.id }}" class="payment-action cancelar"
+                              [disabled]="!!procesando[pedido.id]" (click)="cancelarPedido(pedido)">
+                        {{ procesando[pedido.id] === 'CANCELADO' ? 'Cancelando…' : 'Cancelar pedido' }}
+                      </button>
+                    }
+                  </div>
                 }
               </div>
               @if (abierto(pedido)) {
@@ -110,6 +120,7 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
     .productos { display: grid; gap: .35rem; }
     .productos li { display: flex; justify-content: space-between; gap: .75rem; padding: .35rem .6rem; border-radius: .25rem; background: var(--fnaf-surface2); overflow-wrap: anywhere; }
     .resumen { display: grid; gap: .55rem; justify-items: end; }
+    .pedido-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
     .resumen strong { color: var(--fnaf-text); white-space: nowrap; font-size: 1.15rem; }
     .cancelar { color: #ff9aab; border-color: #b85b71; }
     .comprobante { grid-column: 1 / -1; min-width: 0; padding: 1rem; border: 1px solid var(--fnaf-border); border-radius: .35rem; background: var(--fnaf-bg); }
@@ -123,6 +134,7 @@ import { formatearFechaSantiago } from '../../shared/fecha-santiago';
     @media (max-width: 42rem) {
       .pedido { grid-template-columns: 1fr; gap: .75rem; }
       .resumen { grid-template-columns: 1fr auto; align-items: center; justify-items: start; }
+      .pedido-acciones { justify-content: start; }
     }
     @media (max-width: 23rem) { .resumen { grid-template-columns: 1fr; } }
   `],
@@ -131,13 +143,16 @@ export class OrdersComponent implements OnInit {
   private readonly misPedidosSvc = inject(MisPedidosService);
   private readonly comprobante = signal<{ id: number; usuarioId: string } | null>(null);
   readonly esAdmin = false;
+  readonly puedeConfirmarRecepcion = puedeConfirmarRecepcion;
   get cargando() { return this.misPedidosSvc.cargando(); }
   get procesando() { return this.misPedidosSvc.procesando(); }
+  get cambiandoEstado() { return this.misPedidosSvc.cambiandoEstado(); }
   get error() { return this.misPedidosSvc.error(); }
   get pedidosFiltrados() { return this.misPedidosSvc.pedidos(); }
 
   ngOnInit() { this.misPedidosSvc.inicializar(); }
   cancelarPedido(pedido: Pedido) { this.misPedidosSvc.cancelar(pedido); }
+  confirmarRecepcion(pedido: Pedido) { this.misPedidosSvc.confirmarRecepcion(pedido); }
   actualizar() { this.misPedidosSvc.actualizar(); }
 
   abierto(pedido: Pedido): boolean {

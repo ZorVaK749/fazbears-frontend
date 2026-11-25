@@ -232,6 +232,28 @@ describe('Perfil e Historial: identidad backend y pedidos propios compartidos', 
     pedidos.cancelar(pedido()); pedidos.cancelar(pedido(B, 999)); http.expectNone(() => true);
   });
 
+  it('confirma la recepción del pedido pagado y actualiza el estado tras la respuesta', async () => {
+    const { perfil, orders } = createBoth(); await identity();
+    const pagado: Pedido = { ...pedido(), paymentStatus: 'APPROVED_WEBPAY_INTEGRATION' };
+    http.expectOne(`${API}/pedidos/usuario/${A}`).flush([pagado, pedido(A, 2)]);
+    orders.detectChanges();
+    expect(orders.nativeElement.querySelector('#btn-completar-2')).toBeNull();
+    orders.nativeElement.querySelector('.pedido-enlace').click();
+    orders.nativeElement.querySelector('#btn-completar-1').click();
+    orders.detectChanges();
+    expect(orders.nativeElement.querySelector('#btn-cancelar-1').disabled).toBe(true);
+    orders.componentInstance.confirmarRecepcion(pagado);
+    const request = http.expectOne(`${API}/pedidos/1/estado`);
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ estado: 'COMPLETADO' });
+    expect(perfil.componentInstance.completados).toBe(0);
+    request.flush({ ...pagado, estado: 'COMPLETADO' });
+    orders.detectChanges();
+    expect(perfil.componentInstance.completados).toBe(1);
+    expect(orders.nativeElement.querySelector('#comprobante-1').textContent).toContain('COMPLETADO');
+    expect(orders.nativeElement.querySelector('#btn-completar-1')).toBeNull();
+  });
+
   it('error de cancelación no modifica estado ni reenvía y se informa al usuario', async () => {
     createBoth(); await load(); pedidos.cancelar(pedido());
     http.expectOne(`${API}/pedidos/1/estado`).flush({}, { status: 409, statusText: 'Conflict' });

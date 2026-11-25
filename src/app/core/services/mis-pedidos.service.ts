@@ -1,14 +1,16 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { Subscription, timeout } from 'rxjs';
 import { CarritoService, IdentidadSesion } from './carrito.service';
-import { Pedido, PedidoService } from './pedido.service';
+import { Pedido, PedidoService, puedeConfirmarRecepcion } from './pedido.service';
+
+type EstadoFinal = 'CANCELADO' | 'COMPLETADO';
 
 interface MisPedidosState {
   identidad: Readonly<IdentidadSesion> | null;
   pedidos: Pedido[];
   cargando: boolean;
   error: string;
-  procesando: Record<number, boolean>;
+  procesando: Partial<Record<number, EstadoFinal>>;
 }
 
 /** Una carga propia compartida por Perfil/Historial, nunca GET global + filtro UI. */
@@ -26,6 +28,7 @@ export class MisPedidosService {
     (pedido.total == null || Number.isInteger(pedido.total)) &&
     pedido.items.every(item => Number.isInteger(item.precioUnitario))) : []);
   readonly procesando = computed(() => this.vigente() ? this.estado().procesando : {});
+  readonly cambiandoEstado = computed(() => Object.values(this.procesando()).some(Boolean));
   readonly cargando = computed(() => this.carrito.identidadVerificada()
     ? !this.vigente() || this.estado().cargando : this.carrito.sincronizando());
   readonly error = computed(() => this.carrito.identidadVerificada()
@@ -64,37 +67,49 @@ export class MisPedidosService {
     void this.carrito.inicializar();
     // Revalidar al volver desde otra pantalla (p.ej. tras una orden), sin duplicar
     // la carga ya pendiente ni resolver otra vez /me.
-    if (this.vigente() && !this.estado().cargando) this.refresco.update(n => n + 1);
+    if (this.vigente() && !this.estado().cargando && !this.cambiandoEstado()) this.refresco.update(n => n + 1);
   }
 
   actualizar(): void {
+    if (this.cambiandoEstado()) return;
     if (!this.carrito.identidadVerificada()) { void this.carrito.recargar(); return; }
     this.refresco.update(n => n + 1);
   }
 
   cancelar(pedido: Pedido): void {
+    this.cambiarEstado(pedido, 'CANCELADO');
+  }
+
+  confirmarRecepcion(pedido: Pedido): void {
+    this.cambiarEstado(pedido, 'COMPLETADO');
+  }
+
+  private cambiarEstado(pedido: Pedido, destino: EstadoFinal): void {
     const estado = this.estado();
     const identidad = estado.identidad;
     const id = pedido.id;
     const generacion = this.generacion;
     if (!identidad || !this.actual(identidad, generacion) || !id || estado.procesando[id]
-        || !estado.pedidos.some(p => p.id === id && p.usuarioId === identidad.usuarioId && p.estado === 'PENDIENTE')) return;
-    this.estado.update(s => ({ ...s, error: '', procesando: { ...s.procesando, [id]: true } }));
-    this.registrar(this.api.cancelar(id).pipe(timeout(15000)).subscribe({
+        || pedido.usuarioId !== identidad.usuarioId) return;
+    const registrado = estado.pedidos.find(p => p.id === id && p.usuarioId === identidad.usuarioId);
+    if (!registrado || !(destino === 'CANCELADO' ? registrado.estado === 'PENDIENTE' : puedeConfirmarRecepcion(registrado))) return;
+    const accion = destino === 'CANCELADO' ? 'la cancelación' : 'la recepción';
+    this.estado.update(s => ({ ...s, error: '', procesando: { ...s.procesando, [id]: destino } }));
+    this.registrar(this.api.actualizarEstado(id, destino).pipe(timeout(15000)).subscribe({
       next: actualizado => {
         if (!this.actual(identidad, generacion)) return;
         const valido = actualizado?.id === id && actualizado.usuarioId === identidad.usuarioId
-          && actualizado.estado === 'CANCELADO';
+          && actualizado.estado === destino;
         this.estado.update(s => ({ ...s,
           pedidos: valido ? s.pedidos.map(p => p.id === id ? actualizado : p) : s.pedidos,
-          procesando: { ...s.procesando, [id]: false },
-          error: valido ? '' : 'No se pudo verificar la cancelación. Pulsa ACTUALIZAR.',
+          procesando: { ...s.procesando, [id]: undefined },
+          error: valido ? '' : `No se pudo verificar ${accion}. Pulsa ACTUALIZAR.`,
         }));
       },
       error: () => {
         if (this.actual(identidad, generacion)) this.estado.update(s => ({ ...s,
-          procesando: { ...s.procesando, [id]: false },
-          error: 'No se confirmó la cancelación. Pulsa ACTUALIZAR; no se reenvió la operación.',
+          procesando: { ...s.procesando, [id]: undefined },
+          error: `No se confirmó ${accion}. Pulsa ACTUALIZAR; no se reenvió la operación.`,
         }));
       },
     }));
