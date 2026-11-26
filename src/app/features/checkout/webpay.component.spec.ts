@@ -75,6 +75,45 @@ describe('Webpay integration return', () => {
     http.verify();
   });
 
+  it('explains the Webpay account rate limit and stops the blocked payment', async () => {
+    const snapshot = { fragment: null, queryParamMap: convertToParamMap({}) };
+    const account = { homeAccountId: 'home-owner', localAccountId: 'owner', tenantId: AZURE_TENANT_ID };
+    const owner = { usuarioId: 'owner', tenantId: AZURE_TENANT_ID };
+    TestBed.configureTestingModule({
+      imports: [WebpayComponent],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(),
+        { provide: API_BASE_URL, useValue: '/api' },
+        { provide: MsalService, useValue: { instance: { getActiveAccount: () => account } } },
+        { provide: ActivatedRoute, useValue: { snapshot } },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(WebpayComponent);
+    fixture.detectChanges();
+    http.expectOne('/api/pagos/webpay/capacidad').flush({});
+    const start = fixture.componentInstance.iniciar();
+    await turno();
+    http.expectOne('/api/carrito/me').flush(owner);
+    await turno();
+    http.expectOne('/api/carrito/owner').flush({
+      ...owner, revisionCompra: 'a'.repeat(64),
+      items: [{ id: 8, productoId: 7, nombreProducto: 'Pizza', cantidad: 1, precioUnitario: 12990 }],
+    });
+    await turno();
+    http.expectOne('/api/orden/cotizaciones').flush({
+      operacionId: 'op-1', ownerId: owner.usuarioId, tenantId: owner.tenantId,
+    });
+    await turno();
+    http.expectOne('/api/pagos/webpay').flush({ code: 'WEBPAY_ACCOUNT_RATE_LIMIT' },
+      { status: 429, statusText: 'Too Many Requests' });
+    await start;
+    expect(fixture.componentInstance.cerrado()).toBe(true);
+    expect(fixture.componentInstance.mensaje()).toContain('10 segundos');
+    expect(sessionStorage.getItem(WEBPAY_PENDING_PAYMENT)).toBeNull();
+    expect(sessionStorage.getItem(WEBPAY_CART_REFERENCE)).toBeNull();
+    http.verify();
+  });
+
   it.each([false, true])('preserves the quoted cart revision across the Webpay return (cart edited after retryable error: %s)', async edited => {
     const snapshot = { fragment: null, queryParamMap: convertToParamMap({}) };
     const account = { homeAccountId: 'home-owner', localAccountId: 'owner', tenantId: AZURE_TENANT_ID };

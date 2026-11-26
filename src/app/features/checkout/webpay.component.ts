@@ -167,9 +167,14 @@ export class WebpayComponent implements OnInit {
       form.submit();
       form.remove();
     } catch (error) {
-      this.mensaje.set(error instanceof HttpErrorResponse && error.status === 422
-        ? 'La cotización contiene fracciones de peso. Vuelve al checkout y actualiza el carrito para cotizar de nuevo.'
-        : 'Inicio sin confirmar. Reintenta desde esta pantalla para conservar la cotización y la clave.');
+      if (error instanceof HttpErrorResponse && error.status === 429 && error.error?.code === 'WEBPAY_ACCOUNT_RATE_LIMIT') {
+        this.mensaje.set('Webpay bloqueado por demasiados intentos de esta cuenta. Espera 10 segundos y vuelve al checkout.');
+        this.cerrado.set(true);
+      } else {
+        this.mensaje.set(error instanceof HttpErrorResponse && error.status === 422
+          ? 'La cotización contiene fracciones de peso. Vuelve al checkout y actualiza el carrito para cotizar de nuevo.'
+          : 'Inicio sin confirmar. Reintenta desde esta pantalla para conservar la cotización y la clave.');
+      }
     } finally {
       this.ocupado.set(false);
     }
